@@ -43,7 +43,11 @@ SX1262 *lora1262 = nullptr;
 volatile bool loraPacketReceived = false;
 volatile bool loraInterruptEnabled = true;
 enum class LoRaRadioVariant { SX1276, SX1262 };
+#ifdef LORA_DEFAULT_SX1262
+LoRaRadioVariant loraRadioVariant = LoRaRadioVariant::SX1262;
+#else
 LoRaRadioVariant loraRadioVariant = LoRaRadioVariant::SX1276;
+#endif
 
 int getLoraIrqPin() {
 #ifdef LORA_IRQ
@@ -293,8 +297,12 @@ void downpress() {
 }
 
 void selectRadioVariant(JsonDocument &doc) {
+#ifdef LORA_DEFAULT_SX1262
+    String stored = doc["LoRa_Radio"] | "SX1262";
+#else
     String stored = doc["LoRa_Radio"] | "SX1276";
-    if (stored.equalsIgnoreCase("SX1262")) { loraRadioVariant = LoRaRadioVariant::SX1262; }
+#endif
+    loraRadioVariant = stored.equalsIgnoreCase("SX1262") ? LoRaRadioVariant::SX1262 : LoRaRadioVariant::SX1276;
     std::vector<Option> radioOptions = {
         {"SX1276", []() {}},
         {"SX1262", []() {}}
@@ -387,9 +395,17 @@ void lorachat() {
         Serial.println("creating lora settings .json file");
         JsonDocument doc;
         File file = LittleFS.open("/lora_settings.json", "w");
+#ifdef LORA_DEFAULT_SX1262
+        doc["LoRa_Frequency"] = "868100000.00";
+#else
         doc["LoRa_Frequency"] = "434500000.00";
+#endif
         doc["LoRa_Name"] = "BruceTest";
+#ifdef LORA_DEFAULT_SX1262
+        doc["LoRa_Radio"] = "SX1262";
+#else
         doc["LoRa_Radio"] = "SX1276";
+#endif
         serializeJson(doc, file);
         file.close();
     }
@@ -405,6 +421,12 @@ void lorachat() {
         displayError("Invalid LoRa frequency", true);
         return;
     }
+#ifdef CARDPUTER_ADV_3IN1_MUX
+    if (bandMHz < 850 || bandMHz > 931) {
+        displayError("3-in-1 LoRa: 850-931 MHz", true);
+        return;
+    }
+#endif
     tft.fillScreen(TFT_BLACK);
     update = true;
     Serial.println("Initializing LoRa...");
@@ -456,6 +478,12 @@ void chfreq() {
     snprintf(buf, sizeof(buf), "%.3f", dfreq);
     String freq = num_keyboard(buf, 12, "in Mhz");
     dfreq = freq.toDouble();
+#ifdef CARDPUTER_ADV_3IN1_MUX
+    if (dfreq < 850 || dfreq > 931) {
+        displayError("3-in-1 LoRa: 850-931 MHz", true);
+        return;
+    }
+#endif
     if (dfreq == 0 || freq == "\x1B") {
         displayError("Invalid value");
         return;

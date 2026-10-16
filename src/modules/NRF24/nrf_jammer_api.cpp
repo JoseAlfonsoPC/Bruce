@@ -26,10 +26,10 @@ bool isNRF24Available() {
         NRF24_MODE mode = nrf_setMode();
         if (nrf_start(mode)) {
             if (CHECK_NRF_SPI(mode)) {
-                NRFradio.setPALevel(RF24_PA_MAX);
-                NRFradio.setAddressWidth(3);
-                NRFradio.setPayloadSize(2);
-                NRFradio.setDataRate(RF24_2MBPS);
+                nrfRadio()->setPALevel(RF24_PA_MAX);
+                nrfRadio()->setAddressWidth(3);
+                nrfRadio()->setPayloadSize(2);
+                nrfRadio()->setDataRate(RF24_2MBPS);
             }
             nrf24Initialized = true;
         }
@@ -45,27 +45,27 @@ bool startBLEJammer(BLEJamMode mode, int param) {
 
     switch (mode) {
         case BLE_JAM_ADV_CHANNELS:
-            NRFradio.startConstCarrier(currentPowerLevel, bleAdvertisingChannels[0]);
+            nrfRadio()->startConstCarrier(currentPowerLevel, bleAdvertisingChannels[0]);
             isHopping = false;
             break;
         case BLE_JAM_ALL_CHANNELS:
-            NRFradio.startConstCarrier(currentPowerLevel, 0);
+            nrfRadio()->startConstCarrier(currentPowerLevel, 0);
             isHopping = false;
             break;
         case BLE_JAM_TARGET_CHANNEL:
             if (param >= 0 && param <= 39) {
                 targetChannel = param;
-                NRFradio.startConstCarrier(currentPowerLevel, targetChannel);
+                nrfRadio()->startConstCarrier(currentPowerLevel, targetChannel);
                 isHopping = false;
             }
             break;
         case BLE_JAM_HOP_ADV:
-            NRFradio.startConstCarrier(currentPowerLevel, bleAdvertisingChannels[0]);
+            nrfRadio()->startConstCarrier(currentPowerLevel, bleAdvertisingChannels[0]);
             isHopping = true;
             currentChannelIndex = 0;
             break;
         case BLE_JAM_HOP_ALL:
-            NRFradio.startConstCarrier(currentPowerLevel, 0);
+            nrfRadio()->startConstCarrier(currentPowerLevel, 0);
             isHopping = true;
             currentChannelIndex = 0;
             break;
@@ -104,19 +104,19 @@ void updateBLEJammer() {
             // Bare setChannel() during active CW leaves the PLL in an
             // undefined state on many PA+LNA modules — carrier freezes
             // or stops after the first hop.
-            NRFradio.stopConstCarrier();
+            nrfRadio()->stopConstCarrier();
             delayMicroseconds(500);
-            NRFradio.powerDown();
+            nrfRadio()->powerDown();
             delayMicroseconds(500);
-            NRFradio.powerUp();
+            nrfRadio()->powerUp();
             delayMicroseconds(200);
-            NRFradio.setChannel(ch);
+            nrfRadio()->setChannel(ch);
             // Re-apply settings — power cycle clears radio registers
-            NRFradio.setPALevel(currentPowerLevel);
-            NRFradio.setDataRate(RF24_2MBPS);
-            NRFradio.setAddressWidth(3);
-            NRFradio.setPayloadSize(2);
-            NRFradio.startConstCarrier(currentPowerLevel, ch);
+            nrfRadio()->setPALevel(currentPowerLevel);
+            nrfRadio()->setDataRate(RF24_2MBPS);
+            nrfRadio()->setAddressWidth(3);
+            nrfRadio()->setPayloadSize(2);
+            nrfRadio()->startConstCarrier(currentPowerLevel, ch);
             lastChannelHop = millis();
         }
     }
@@ -126,8 +126,8 @@ void stopBLEJammer() {
     if (!bleJammingActive) return;
     NRF24_MODE mode = nrf_setMode();
     if (CHECK_NRF_SPI(mode)) {
-        NRFradio.stopConstCarrier();
-        NRFradio.powerDown(); // FIX: explicit power-down for clean shutdown
+        nrfRadio()->stopConstCarrier();
+        nrfRadio()->powerDown(); // FIX: explicit power-down for clean shutdown
     }
     bleJammingActive = false;
     isHopping = false;

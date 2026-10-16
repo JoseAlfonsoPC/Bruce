@@ -18,14 +18,15 @@ JSValue native_nrf24Begin(JSContext *ctx, JSValue *this_val, int argc, JSValue *
     if (channel < 0) channel = 0;
     if (channel > 125) channel = 125;
 
-    NRFradio.setChannel(channel);
-    NRFradio.setPALevel(RF24_PA_MAX);
-    NRFradio.setDataRate(RF24_2MBPS);
+    nrfRadio()->setChannel(channel);
+    nrfRadio()->setPALevel(RF24_PA_MAX);
+    nrfRadio()->setDataRate(RF24_2MBPS);
 
     return JS_NewBool(true);
 }
 
 JSValue native_nrf24Send(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (!nrf_is_ready()) return JS_ThrowInternalError(ctx, "call nrf24.begin first");
     // usage: nrf24.send(address_string_hex, data_uint8array)
     // address is a 5-byte hex string like "01:23:45:67:89"
     if (argc < 2) return JS_NewBool(false);
@@ -58,14 +59,15 @@ JSValue native_nrf24Send(JSContext *ctx, JSValue *this_val, int argc, JSValue *a
     // Limit to 32 bytes (NRF24 max payload)
     if (dataLen > 32) dataLen = 32;
 
-    NRFradio.stopListening();
-    NRFradio.openWritingPipe(address);
-    bool success = NRFradio.write(data, dataLen);
+    nrfRadio()->stopListening();
+    nrfRadio()->openWritingPipe(address);
+    bool success = nrfRadio()->write(data, dataLen);
 
     return JS_NewBool(success);
 }
 
 JSValue native_nrf24Receive(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (!nrf_is_ready()) return JS_ThrowInternalError(ctx, "call nrf24.begin first");
     // usage: nrf24.receive(timeout_ms)
     // returns: hex string of received data, or empty string on timeout
     int timeout = 5000;
@@ -76,15 +78,15 @@ JSValue native_nrf24Receive(JSContext *ctx, JSValue *this_val, int argc, JSValue
     if (timeout > 30000) timeout = 30000;
 
     uint8_t address[5] = {0x01, 0x23, 0x45, 0x67, 0x89};
-    NRFradio.openReadingPipe(1, address);
-    NRFradio.startListening();
+    nrfRadio()->openReadingPipe(1, address);
+    nrfRadio()->startListening();
 
     unsigned long start = millis();
     while (millis() - start < (unsigned long)timeout) {
-        if (NRFradio.available()) {
+        if (nrfRadio()->available()) {
             uint8_t buf[32] = {0};
-            NRFradio.read(buf, sizeof(buf));
-            NRFradio.stopListening();
+            nrfRadio()->read(buf, sizeof(buf));
+            nrfRadio()->stopListening();
 
             // Return as hex string
             String hexStr = "";
@@ -99,24 +101,26 @@ JSValue native_nrf24Receive(JSContext *ctx, JSValue *this_val, int argc, JSValue
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 
-    NRFradio.stopListening();
+    nrfRadio()->stopListening();
     return JS_NewString(ctx, "");
 }
 
 JSValue native_nrf24SetChannel(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (!nrf_is_ready()) return JS_ThrowInternalError(ctx, "call nrf24.begin first");
     // usage: nrf24.setChannel(channel)
     if (argc > 0 && JS_IsNumber(ctx, argv[0])) {
         int channel;
         JS_ToInt32(ctx, &channel, argv[0]);
         if (channel < 0) channel = 0;
         if (channel > 125) channel = 125;
-        NRFradio.setChannel(channel);
+        nrfRadio()->setChannel(channel);
     }
     return JS_UNDEFINED;
 }
 
 JSValue native_nrf24IsConnected(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
-    return JS_NewBool(NRFradio.isChipConnected());
+    if (!nrf_is_ready()) return JS_NewBool(false);
+    return JS_NewBool(nrfRadio()->isChipConnected());
 }
 
 #endif

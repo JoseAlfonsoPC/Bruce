@@ -219,3 +219,17 @@ trimmed or adapted. Each retains its original author's license.
   `platformio-espressif32-sunton` board support.
 - **`lib/mquickjs_headers`** — headers generated from the **mquickjs** fork
   above (see `gen_mqjs_headers.py`).
+
+## Cardputer ADV 3-in-1 adaptation
+
+The optional `m5stack-cardputer-adv-3in1` profile and keyboard/NRF24
+multiplexing in `boards/m5stack-cardputer/interface.cpp`,
+`boards/m5stack-cardputer/radio_mux.cpp` and
+`src/core/bus_HAL.cpp` incorporate and adapt leandrofleury's contribution
+[PR #2827](https://github.com/BruceDevices/firmware/pull/2827), commit
+`7263fcb3fa1873b6df1325fd1751c44323d2be5c`, submitted to this AGPL-licensed
+project. The spectrum changes were adapted to this checkout. Shared SPI
+coordination, recursive locking of all RF24 accesses, CE restoration after
+keyboard transactions and receive-only hardware diagnostics were added.
+The expansion pin mapping is documented by
+[JosephCGS](https://github.com/JosephCGS/Cardputer-ADV-CC1101-NRF24L01-LoRa).

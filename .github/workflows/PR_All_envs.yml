@@ -112,7 +112,7 @@ jobs:
 
       - name: Install PlatformIO Core
         run: |
-          pip install platformio requests esptool intelhex
+          pip install -r requirements-build.txt
           if [[ "${{ github.ref_type }}" == "tag" ]]; then
           version=${{ github.ref_name }}
           else
@@ -143,6 +143,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Bruce-${{ matrix.board.env }}
-          path: Bruce-*.bin
+          path: |
+            Bruce-*.bin
+            Bruce-*.bin.sha256
           retention-days: 5
           if-no-files-found: error

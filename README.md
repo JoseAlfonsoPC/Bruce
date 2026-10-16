@@ -4,6 +4,10 @@
 
 Bruce is a versatile ESP32 firmware packed with offensive-security tools, built to make Red Team operations fast and portable.
 
+**Documentación en español:** [instalación, uso, arquitectura, desarrollo y pruebas](docs/README.md).
+For the JosephCGS LoRa / CC1101 / NRF24 expansion, see the [Cardputer ADV 3-in-1 guide](docs/CARDPUTER_ADV_3IN1.md)
+and build the `m5stack-cardputer-adv-3in1` environment. Check [delivery status and hardware limits](docs/ESTADO.md).
+
 It also supports [M5Stack](https://shop.m5stack.com), [LILYGO](https://lilygo.cc) , [RockBase IoT](https://www.rockbaseiot.com) and [Elecrow](https://www.elecrow.com) products, and works great with the Cardputer, Sticks, M5Cores, T-Decks and T-Embeds.
 
 ## :zap: Get Our Official DevKit!

@@ -1,6 +1,7 @@
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
 #include "interpreter.h"
 #include "core/utils.h"
+#include "hardware_js.h"
 
 static void js_log_func(void *opaque, const void *buf, size_t buf_len) { fwrite(buf, 1, buf_len, stdout); }
 
@@ -105,6 +106,7 @@ void interpreterHandler(void *pvParameters) {
     scriptName = NULL;
 
     js_timers_deinit(ctx);
+    js_hardware_cleanup();
     JS_FreeContext(ctx);
     free(mem_buf);
 

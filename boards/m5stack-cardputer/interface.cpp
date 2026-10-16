@@ -1,5 +1,6 @@
 #include "core/powerSave.h"
 #include "core/utils.h"
+#include "radio_mux.h"
 #include <Adafruit_TCA8418.h>
 #include <Keyboard.h>
 #include <Wire.h>
@@ -133,6 +134,21 @@ void _post_setup_gpio() {
     bruceConfigPins.gps_bus.tx = (gpio_num_t)13;
     bruceConfigPins.gpsBaudrate = 115200;
 
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+    // Cardputer ADV + CC1101/NRF24/LoRa 3-in-1 expansion.
+    bruceConfigPins.CC1101_bus.sck = (gpio_num_t)40;
+    bruceConfigPins.CC1101_bus.miso = (gpio_num_t)39;
+    bruceConfigPins.CC1101_bus.mosi = (gpio_num_t)14;
+    bruceConfigPins.CC1101_bus.cs = (gpio_num_t)15;
+    bruceConfigPins.CC1101_bus.io0 = (gpio_num_t)13;
+
+    bruceConfigPins.NRF24_bus.sck = (gpio_num_t)40;
+    bruceConfigPins.NRF24_bus.miso = (gpio_num_t)39;
+    bruceConfigPins.NRF24_bus.mosi = (gpio_num_t)14;
+    bruceConfigPins.NRF24_bus.cs = (gpio_num_t)9;
+    bruceConfigPins.NRF24_bus.io0 = (gpio_num_t)8;
+#else
+    // Preserve the existing Cardputer ADV runtime defaults.
     bruceConfigPins.CC1101_bus.sck = (gpio_num_t)40;
     bruceConfigPins.CC1101_bus.miso = (gpio_num_t)39;
     bruceConfigPins.CC1101_bus.mosi = (gpio_num_t)14;
@@ -144,19 +160,37 @@ void _post_setup_gpio() {
     bruceConfigPins.NRF24_bus.mosi = (gpio_num_t)14;
     bruceConfigPins.NRF24_bus.cs = (gpio_num_t)6;
     bruceConfigPins.NRF24_bus.io0 = (gpio_num_t)4;
+#endif
 
+#if !defined(CARDPUTER_ADV_3IN1_MUX)
     pinMode(bruceConfigPins.NRF24_bus.cs, OUTPUT);
+    digitalWrite(bruceConfigPins.NRF24_bus.cs, HIGH);
+#endif
+
     pinMode(bruceConfigPins.CC1101_bus.cs, OUTPUT);
     pinMode(bruceConfigPins.LoRa_bus.cs, OUTPUT);
-    digitalWrite(bruceConfigPins.NRF24_bus.cs, HIGH);
     digitalWrite(bruceConfigPins.CC1101_bus.cs, HIGH);
     digitalWrite(bruceConfigPins.LoRa_bus.cs, HIGH);
 
+    // Finish TCA8418 keyboard initialization first.
     tca.matrix(7, 8);
     tca.flush();
+
     pinMode(11, INPUT);
-    attachInterruptArg(digitalPinToInterrupt(11), gpio_isr_handler, nullptr, CHANGE);
+    attachInterruptArg(
+        digitalPinToInterrupt(11),
+        gpio_isr_handler,
+        nullptr,
+        CHANGE
+    );
+
     tca.enableInterrupts();
+
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+    // Create the mux mutex during board setup, before the input task starts
+    // competing with NRF24 operations.
+    adv3in1InitRadioPins();
+#endif
 }
 
 /*********************************************************************
@@ -220,137 +254,153 @@ void InputHandler(void) {
         keyStroke key;
 
         if (kb_interrupt || digitalRead(11) == LOW) {
-            if (!kb_interrupt && digitalRead(11) == LOW) {
-                detachInterrupt(digitalPinToInterrupt(11));
-                attachInterruptArg(digitalPinToInterrupt(11), gpio_isr_handler, nullptr, CHANGE);
-                Serial.println("Forcing keyboard interrupt, Restoring Interruptions.");
-                kb_interrupt = true;
+            bool keyboardMuxReady = true;
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+            keyboardMuxReady = adv3in1KeyboardTryBegin();
+#endif
+
+            if (keyboardMuxReady) {
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+                adv3in1BeginI2c();
+#endif
+
+                if (!kb_interrupt && digitalRead(11) == LOW) {
+                    detachInterrupt(digitalPinToInterrupt(11));
+                    attachInterruptArg(digitalPinToInterrupt(11), gpio_isr_handler, nullptr, CHANGE);
+                    Serial.println("Forcing keyboard interrupt, Restoring Interruptions.");
+                    kb_interrupt = true;
+                }
+
+                while (tca.available() > 0) {
+                    int keyEvent = tca.getEvent();
+                    bool pressed = (keyEvent & 0x80); // Bit 7: 1 Pressed, 0 Released
+                    uint8_t value = keyEvent & 0x7F;  // Bits 0-6: key value
+
+                    uint8_t row, col;
+                    mapRawKeyToPhysical(value, row, col);
+                    if (row >= 4 || col >= 14) continue;
+                    if (wakeUpScreen()) continue;
+
+                    AnyKeyPress = true;
+                    keyEventHandled = true;
+
+                    if (handleSpecialKeys(row, col, pressed) > 0) continue;
+
+                    if (!pressed) { KeyStroke.Clear(); }
+
+                    char keyVal = getKeyChar(row, col);
+
+                    if (keyVal == KEY_BACKSPACE && col == 13) {
+                        del = pressed;
+                        esc = pressed;
+                        if (pressed) delPulse = true;
+                    } else if (keyVal == '`') {
+                        esc = pressed;
+                    } else if (keyVal == KEY_ENTER && col == 13) {
+                        sel = pressed;
+                    } else if (keyVal == ';') {
+                        up = pressed;
+                        arrow_up = pressed;
+                        if (pressed) {
+                            prev = true;
+                            prevPulse = true;
+                            upPulse = true;
+                            prevRepeatTime = millis() + TCA8418_REPEAT_START_MS;
+                            upRepeatTime = millis() + TCA8418_REPEAT_START_MS;
+                        } else {
+                            prev = false;
+                        }
+                    } else if (keyVal == ',') {
+                        prev = pressed;
+                        arrow_le = pressed;
+                        if (pressed) {
+                            prevPulse = true;
+                            prevRepeatTime = millis() + TCA8418_REPEAT_START_MS;
+                        }
+                    } else if (keyVal == '.') {
+                        down = pressed;
+                        arrow_dw = pressed;
+                        if (pressed) {
+                            next = true;
+                            nextPulse = true;
+                            downPulse = true;
+                            nextRepeatTime = millis() + TCA8418_REPEAT_START_MS;
+                            downRepeatTime = millis() + TCA8418_REPEAT_START_MS;
+                        } else {
+                            next = false;
+                        }
+                    } else if (keyVal == '/') {
+                        next = pressed;
+                        arrow_ry = pressed;
+                        if (pressed) {
+                            nextPulse = true;
+                            nextRepeatTime = millis() + TCA8418_REPEAT_START_MS;
+                        }
+                    } else if (keyVal == 0xFF) {
+                        key.fn = pressed;
+                    } else if (keyVal == KEY_LEFT_CTRL) {
+                        ctrl = pressed;
+                    } else if (keyVal == KEY_LEFT_ALT) {
+                        alt = pressed;
+                    } else if (keyVal == KEY_OPT) {
+                        gui = pressed;
+                    }
+
+                    if (!pressed) continue;
+
+                    if (gui) {
+                        key.gui = true;
+                        key.modifier_keys.emplace_back(KEY_OPT);
+                        key.hid_keys.emplace_back(KEY_OPT);
+                        keyPulse = true;
+                    }
+                    if (alt) {
+                        key.alt = true;
+                        key.modifier_keys.emplace_back(KEY_LEFT_ALT);
+                        key.hid_keys.emplace_back(KEY_LEFT_ALT);
+                        keyPulse = true;
+                    }
+                    if (ctrl) {
+                        key.ctrl = true;
+                        key.modifier_keys.emplace_back(KEY_LEFT_CTRL);
+                        key.hid_keys.emplace_back(KEY_LEFT_CTRL);
+                        keyPulse = true;
+                    }
+                    if (shift_key_pressed) {
+                        key.modifier_keys.emplace_back(KEY_LEFT_SHIFT);
+                        key.hid_keys.emplace_back(KEY_LEFT_SHIFT);
+                        keyPulse = true;
+                    }
+                    if (sel) {
+                        key.enter = true;
+                        key.exit_key = true;
+                        keyPulse = true;
+                    }
+                    if (fn_key_pressed) {
+                        key.fn = true;
+                        keyPulse = true;
+                    }
+
+                    if (keyVal != 0xFF && !sel && !gui && !alt && !ctrl && !del && keyVal != KEY_LEFT_SHIFT) {
+                        if (fn_key_pressed && arrow_up) key.word.emplace_back(0xDA);
+                        else if (fn_key_pressed && arrow_dw) key.word.emplace_back(0xD9);
+                        else if (fn_key_pressed && arrow_ry) key.word.emplace_back(0xD7);
+                        else if (fn_key_pressed && arrow_le) key.word.emplace_back(0xD8);
+                        else if (fn_key_pressed && keyVal == '`') key.word.emplace_back(0xB1);
+                        else key.word.emplace_back(keyVal);
+                        keyPulse = true;
+                    }
+                }
+
+                tca.writeRegister(TCA8418_REG_INT_STAT, 1);
+                int intstat = tca.readRegister(TCA8418_REG_INT_STAT);
+                if ((intstat & 0x01) == 0) { kb_interrupt = false; }
+
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+                adv3in1EndI2c();
+                adv3in1KeyboardEnd();
+#endif
             }
-
-            while (tca.available() > 0) {
-                int keyEvent = tca.getEvent();
-                bool pressed = (keyEvent & 0x80); // Bit 7: 1 Pressed, 0 Released
-                uint8_t value = keyEvent & 0x7F;  // Bits 0-6: key value
-
-                uint8_t row, col;
-                mapRawKeyToPhysical(value, row, col);
-                if (row >= 4 || col >= 14) continue;
-                if (wakeUpScreen()) continue;
-
-                AnyKeyPress = true;
-                keyEventHandled = true;
-
-                if (handleSpecialKeys(row, col, pressed) > 0) continue;
-
-                if (!pressed) { KeyStroke.Clear(); }
-
-                char keyVal = getKeyChar(row, col);
-
-                if (keyVal == KEY_BACKSPACE && col == 13) {
-                    del = pressed;
-                    esc = pressed;
-                    if (pressed) delPulse = true;
-                } else if (keyVal == '`') {
-                    esc = pressed;
-                } else if (keyVal == KEY_ENTER && col == 13) {
-                    sel = pressed;
-                } else if (keyVal == ';') {
-                    up = pressed;
-                    arrow_up = pressed;
-                    if (pressed) {
-                        prev = true;
-                        prevPulse = true;
-                        upPulse = true;
-                        prevRepeatTime = millis() + TCA8418_REPEAT_START_MS;
-                        upRepeatTime = millis() + TCA8418_REPEAT_START_MS;
-                    } else {
-                        prev = false;
-                    }
-                } else if (keyVal == ',') {
-                    prev = pressed;
-                    arrow_le = pressed;
-                    if (pressed) {
-                        prevPulse = true;
-                        prevRepeatTime = millis() + TCA8418_REPEAT_START_MS;
-                    }
-                } else if (keyVal == '.') {
-                    down = pressed;
-                    arrow_dw = pressed;
-                    if (pressed) {
-                        next = true;
-                        nextPulse = true;
-                        downPulse = true;
-                        nextRepeatTime = millis() + TCA8418_REPEAT_START_MS;
-                        downRepeatTime = millis() + TCA8418_REPEAT_START_MS;
-                    } else {
-                        next = false;
-                    }
-                } else if (keyVal == '/') {
-                    next = pressed;
-                    arrow_ry = pressed;
-                    if (pressed) {
-                        nextPulse = true;
-                        nextRepeatTime = millis() + TCA8418_REPEAT_START_MS;
-                    }
-                } else if (keyVal == 0xFF) {
-                    key.fn = pressed;
-                } else if (keyVal == KEY_LEFT_CTRL) {
-                    ctrl = pressed;
-                } else if (keyVal == KEY_LEFT_ALT) {
-                    alt = pressed;
-                } else if (keyVal == KEY_OPT) {
-                    gui = pressed;
-                }
-
-                if (!pressed) continue;
-
-                if (gui) {
-                    key.gui = true;
-                    key.modifier_keys.emplace_back(KEY_OPT);
-                    key.hid_keys.emplace_back(KEY_OPT);
-                    keyPulse = true;
-                }
-                if (alt) {
-                    key.alt = true;
-                    key.modifier_keys.emplace_back(KEY_LEFT_ALT);
-                    key.hid_keys.emplace_back(KEY_LEFT_ALT);
-                    keyPulse = true;
-                }
-                if (ctrl) {
-                    key.ctrl = true;
-                    key.modifier_keys.emplace_back(KEY_LEFT_CTRL);
-                    key.hid_keys.emplace_back(KEY_LEFT_CTRL);
-                    keyPulse = true;
-                }
-                if (shift_key_pressed) {
-                    key.modifier_keys.emplace_back(KEY_LEFT_SHIFT);
-                    key.hid_keys.emplace_back(KEY_LEFT_SHIFT);
-                    keyPulse = true;
-                }
-                if (sel) {
-                    key.enter = true;
-                    key.exit_key = true;
-                    keyPulse = true;
-                }
-                if (fn_key_pressed) {
-                    key.fn = true;
-                    keyPulse = true;
-                }
-
-                if (keyVal != 0xFF && !sel && !gui && !alt && !ctrl && !del && keyVal != KEY_LEFT_SHIFT) {
-                    if (fn_key_pressed && arrow_up) key.word.emplace_back(0xDA);
-                    else if (fn_key_pressed && arrow_dw) key.word.emplace_back(0xD9);
-                    else if (fn_key_pressed && arrow_ry) key.word.emplace_back(0xD7);
-                    else if (fn_key_pressed && arrow_le) key.word.emplace_back(0xD8);
-                    else if (fn_key_pressed && keyVal == '`') key.word.emplace_back(0xB1);
-                    else key.word.emplace_back(keyVal);
-                    keyPulse = true;
-                }
-            }
-
-            tca.writeRegister(TCA8418_REG_INT_STAT, 1);
-            int intstat = tca.readRegister(TCA8418_REG_INT_STAT);
-            if ((intstat & 0x01) == 0) { kb_interrupt = false; }
         }
 
         unsigned long now = millis();
@@ -503,7 +553,17 @@ void _setup_codec_speaker(bool enable) {
     };
     static constexpr const uint8_t disabled_bulk_data[] = {0};
 
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+    adv3in1Nrf24CriticalBegin();
+    adv3in1BeginI2c();
+#endif
+
     i2c_bulk_write(&Wire1, ES8311_ADDR, enable ? enabled_bulk_data : disabled_bulk_data);
+
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+    adv3in1EndI2c();
+    adv3in1Nrf24CriticalEnd();
+#endif
 }
 
 /*********************************************************************
@@ -540,5 +600,15 @@ void _setup_codec_mic(bool enable) {
         0
     };
 
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+    adv3in1Nrf24CriticalBegin();
+    adv3in1BeginI2c();
+#endif
+
     i2c_bulk_write(&Wire1, ES8311_ADDR, enable ? enabled_bulk_data : disabled_bulk_data);
+
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+    adv3in1EndI2c();
+    adv3in1Nrf24CriticalEnd();
+#endif
 }

@@ -10,6 +10,7 @@ JSValue native_i2c_scan(JSContext *ctx, JSValue *this_val, int argc, JSValue *ar
 JSValue native_i2c_write(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_i2c_read(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_i2c_write_read(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_i2c_end(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 }
 
 #endif

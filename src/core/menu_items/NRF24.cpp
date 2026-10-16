@@ -9,10 +9,11 @@
 void NRF24Menu::optionsMenu() {
     options.clear();
     options.push_back({"Information", nrf_info});
+    options.push_back({"Hardware check", nrf_diagnostics});
     options.push_back({"Spectrum", nrf_spectrum});
-    #if !defined(LITE_VERSION)
+#if !defined(LITE_VERSION)
     options.push_back({"MouseJack", nrf_mousejack});
-    #endif
+#endif
     options.push_back({"NRF Jammer", nrf_jammer});
 
 #if defined(ARDUINO_M5STICK_C_PLUS) || defined(ARDUINO_M5STICK_C_PLUS2)

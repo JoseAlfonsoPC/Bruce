@@ -114,8 +114,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install requests esptool intelhex
-          pip install platformio
+          pip install -r requirements-build.txt
 
       - name: Prepare PlatformIO file (Bruce version logic)
         id: prepare_version

@@ -1,0 +1,174 @@
+{
+  "fecha": "2026-10-17",
+  "revision_base": "a59213f3",
+  "python": "3.11",
+  "platformio": "6.2.0",
+  "pioarduino": "55.03.39",
+  "pruebas_python": 24,
+  "comprobaciones_buses": {
+    "general": 57,
+    "adv_3in1": 59
+  },
+  "comprobaciones_multiplexor_nrf24": {
+    "general": 2,
+    "adv_3in1": 30,
+    "operaciones_radio_concurrentes": 1000,
+    "eventos_teclado_concurrentes": 200
+  },
+  "sanitizadores": [
+    "AddressSanitizer",
+    "UndefinedBehaviorSanitizer"
+  ],
+  "ejemplos_compilados_microquickjs": 3,
+  "documentos_con_enlaces_locales_comprobados": 13,
+  "validacion_fisica": "instalacion, arranque USB e inicializacion SPI verificados; barrido controlado 120 s sin reinicios y cierre por Esc remoto; segundo resumen tras actividad confirmada: 10668 capturas, 7 con CRC valido y payload vacio, 0 con datos, 0 identificados, duracion sin delimitar; persistencia de Scan Info comprobada; teclado fisico y otras pruebas pendientes",
+  "consulta_version_usb": "Bruce vdev; SDK v5.5.4-dirty; M5Stack Cardputer",
+  "firmware_instalado_desde_esta_sesion": true,
+  "instalacion_usb": {
+    "entorno": "m5stack-cardputer-adv-3in1",
+    "particion_existente": "brucea",
+    "direccion_aplicacion": "0x170000",
+    "capacidad_particion_bytes": 4128768,
+    "aplicacion_bytes": 4117648,
+    "sha256_aplicacion": "49c0f6f2d0bdf0b9fefde5a75cd86b1294867dc387c6e7b9c7a5cf5dea75f998",
+    "verificacion_flash": "esptool verify-flash: digest matched",
+    "cargador_rom": true,
+    "launcher_conservado": true,
+    "tabla_particiones_y_nvs_conservados_durante_grabacion": true,
+    "otras_aplicaciones_fuera_del_rango_de_escritura": true,
+    "arranque_seleccionado": "ota_0: brucea; secuencia 4",
+    "copia_anterior_selector_ota_conservada": true,
+    "respuestas_info_recibidas": 2,
+    "panic_detectado_durante_comprobacion": false,
+    "copia_completa_bytes": 8388608,
+    "copia_local": ".pio/backups/cardputer-adv-before-install-20261016-ssoffskr.bin",
+    "sha256_copia": "5f645d46e78d73803b26301fa4ba3f690fa84bf89e9b665173e87c7000fd402b",
+    "nrf24_inicializacion_comprobada": true,
+    "nrf24_respuesta_spi_comprobada": true,
+    "actualizacion_Information_MouseJack": true,
+    "metadatos_arranque_y_nvs_conservados_durante_actualizacion": true,
+    "deteccion_perifericos_MouseJack": "usuario notifica CRC=1 y Found=0 tras actualizar; periférico sin identificar",
+    "transmisiones_activadas_desde_ordenador": false,
+    "actualizacion_captura_ESB": true,
+    "diagnostico_Scan_Info_instalado": true
+  },
+  "compilaciones": [
+    {
+      "entorno": "m5stack-cardputer",
+      "resultado": "SUCCESS",
+      "aplicacion_bytes": 4114960,
+      "particion_aplicacion_bytes": 5111808,
+      "imagen_combinada_bytes": 4180496,
+      "sha256": "8b4fe204ac2d9bc52e858aab09e9e6201085d151f7928084543ad5598567a376",
+      "coincide_con_imagen_factory_platformio": true
+    },
+    {
+      "entorno": "m5stack-cardputer-adv-3in1",
+      "resultado": "SUCCESS",
+      "aplicacion_bytes": 4117648,
+      "particion_aplicacion_bytes": 5111808,
+      "imagen_combinada_bytes": 4183184,
+      "sha256": "56acdebb1e2807ee984bf9e1b02b7565b78e667bffd0515ac2c19086d9cc83af",
+      "coincide_con_imagen_factory_platformio": true
+    }
+  ],
+  "comprobaciones_transporte_nrf24": 16,
+  "comprobaciones_decodificador_esb_pasivo": 32140,
+  "informe_usuario_antes_correccion_captura_esb": {
+    "RX": "aumenta durante el barrido",
+    "Found": 0,
+    "periferico": "Logitech; modelo no disponible"
+  },
+  "informe_usuario_tras_correccion_captura_esb": {
+    "CRC": 1,
+    "Found": 0,
+    "RX_final": null,
+    "duracion_segundos": 60,
+    "resultado": "CRC=1 y Found=0 repetidos tras un minuto con actividad; periférico sin identificar",
+    "siguiente_prueba": "leer contadores y metadatos de Scan Info tras instalar diagnóstico",
+    "enlace_receptor_usb_confirmado_por_desconexion": true
+  },
+  "reinicio_reportado_durante_diagnostico_nrf24": {
+    "reportado_por_usuario": true,
+    "contexto_exacto": "usuario confirma reinicio espontaneo mientras escaneaba",
+    "causa_confirmada": null,
+    "volcado_recuperado_bytes": 65536,
+    "volcado_crc32_valido": true,
+    "identificador_elf_volcado": "e974e6455",
+    "identificador_corresponde_a": "Launcher original de la unidad",
+    "volcado_coincide_con_firmware_Bruce_instalado": false,
+    "no_se_atribuye_el_reinicio_actual_al_volcado_antiguo": true,
+    "firmware_modificado_durante_extraccion": false,
+    "Bruce_responde_por_USB_despues_de_extraccion": true,
+    "identificador_ELF_Bruce_instalado": "7db8554d4",
+    "razon_reset_observada_durante_extraccion": "USB_UART_CHIP_RESET, provocado por la operación de diagnóstico; no identifica el reinicio previo del usuario",
+    "interferencia_del_monitor_USB_identificada": true,
+    "arranques_USB_UART_CHIP_RESET_observados_en_consultas_fuera_del_escaneo": true,
+    "no_se_atribuye_automaticamente_a_un_fallo_del_firmware": true,
+    "resultado_prueba_controlada": "120 s de barrido sin reinicios; uptime de 00:03:41 a 00:05:50; cierre con Esc remoto",
+    "conclusion_diagnostico": "El monitor anterior inducia reinicios USB; no se reprodujo un reinicio del escaner durante el ensayo controlado con el monitor corregido. No se determina la causa del reinicio original notificado por el usuario."
+  },
+  "informe_usuario_con_Scan_Info": {
+    "CRC": 1,
+    "Found": 0,
+    "resumen_USB_completo_recibido": false,
+    "reinicio_reportado": true,
+    "causa_reinicio_confirmada": null
+  },
+  "monitor_usb_sin_cambios_DTR_RTS": {
+    "date": "2026-10-16",
+    "first_uptime_seconds": 92,
+    "before_close_uptime_seconds": 100,
+    "after_open_uptime_seconds": 105,
+    "uptime_continued_across_reopen": true,
+    "boot_messages_first": false,
+    "boot_messages_reopen": false,
+    "explicit_DTR_RTS_operations": false,
+    "HUPCL": false
+  },
+  "fecha_compilaciones": "2026-10-16",
+  "barrido_controlado_con_monitor_corregido": {
+    "date": "2026-10-16",
+    "firmware": "Scan Info; ELF 7db8554d4",
+    "explicit_DTR_RTS_operations": false,
+    "HUPCL": false,
+    "radio_transmission_activated": false,
+    "status": "completed",
+    "observation_seconds": 120.0,
+    "reset_observed": false,
+    "scan_summary": {
+      "received": 7229,
+      "valid": 5,
+      "empty": 5,
+      "data": 0,
+      "flat": 38,
+      "found": 0
+    },
+    "uptime_responses": [
+      "00:03:41",
+      "00:05:50"
+    ],
+    "fecha_fin": "2026-10-17"
+  },
+  "resumen_recuperado_tras_actividad_Logitech": {
+    "date": "2026-10-17",
+    "firmware_elf_prefix": "7db8554d4",
+    "explicit_DTR_RTS_operations": false,
+    "HUPCL": false,
+    "radio_transmission_activated": false,
+    "user_reports_Logitech_activity_during_test": true,
+    "scan_start_time_and_duration": null,
+    "note": "Summary recovered after the activity report; remote preparation did not establish an exact new scan start. Not counted as a second timed 120-second trial.",
+    "uptime_after_stopping_scan": "00:11:30",
+    "scan_summary": {
+      "received": 10668,
+      "valid": 7,
+      "empty": 7,
+      "data": 0,
+      "flat": 49,
+      "found": 0
+    },
+    "left_open_on_device": "MouseJack / Scan Info",
+    "reset_marker_during_final_navigation": false
+  }
+}

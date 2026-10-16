@@ -93,15 +93,15 @@ void nrf_jammer() {
         bool need_reshuffle = true;
         uint8_t shuffled_idx[124];
         if (CHECK_NRF_SPI(mode)) {
-            NRFradio.setPALevel(RF24_PA_MAX);
-            NRFradio.startConstCarrier(RF24_PA_MAX, 50);
-            NRFradio.setAddressWidth(5);
-            NRFradio.setPayloadSize(2);
-            if (!NRFradio.setDataRate(RF24_2MBPS)) {
+            nrfRadio()->setPALevel(RF24_PA_MAX);
+            nrfRadio()->startConstCarrier(RF24_PA_MAX, 50);
+            nrfRadio()->setAddressWidth(5);
+            nrfRadio()->setPayloadSize(2);
+            if (!nrfRadio()->setDataRate(RF24_2MBPS)) {
                 Serial.println("Failed to set data rate to 2Mbps, trying 1Mbps");
-                if (!NRFradio.setDataRate(RF24_1MBPS)) {
+                if (!nrfRadio()->setDataRate(RF24_1MBPS)) {
                     Serial.println("Failed to set data rate to 1Mbps, trying 250kbps");
-                    if (!NRFradio.setDataRate(RF24_250KBPS)) {
+                    if (!nrfRadio()->setDataRate(RF24_250KBPS)) {
                         Serial.println("Failed to set data rate to 250kbps, giving up");
                     }
                 }
@@ -172,7 +172,7 @@ void nrf_jammer() {
             } else {
                 ch_idx = hopIndex;
             }
-            if (CHECK_NRF_SPI(mode)) { NRFradio.setChannel(modes[modeIndex].channels[ch_idx]); }
+            if (CHECK_NRF_SPI(mode)) { nrfRadio()->setChannel(modes[modeIndex].channels[ch_idx]); }
 
             if (check(NextPress)) {
                 modeIndex++;
@@ -196,9 +196,14 @@ void nrf_jammer() {
                 need_reshuffle = true;
                 redraw = true;
             }
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+            // Give the input task a regular opportunity to service the shared
+            // keyboard pins; no radio guard is held while yielding.
+            vTaskDelay(1);
+#endif
         }
 
-        if (CHECK_NRF_SPI(mode)) NRFradio.stopConstCarrier();
+        if (CHECK_NRF_SPI(mode)) nrfRadio()->stopConstCarrier();
         if ((CHECK_NRF_UART(mode)) || (CHECK_NRF_BOTH(mode))) { NRFSerial.println("OFF"); }
 
     } else {

@@ -1,0 +1,2 @@
+# Python 3.10+ is required by pioarduino 55.03.39.
+platformio==6.2.0

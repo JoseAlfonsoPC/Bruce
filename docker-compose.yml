@@ -10,7 +10,8 @@ services:
       - pio_build:/work/.pio
     environment:
       # Optional overrides:
-      - PIO_ENVS=m5stack-cplus2
+      - PIO_ENVS=${PIO_ENVS:-m5stack-cardputer-adv-3in1}
+      - PIO_JOBS=${PIO_JOBS:-1}
       - PLATFORMIO_CORE_DIR=/root/.platformio
     command: ["bash", "docker/run_all_envs.sh"]
 

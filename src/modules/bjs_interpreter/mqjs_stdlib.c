@@ -507,10 +507,29 @@ static const JSPropDef js_i2c[] = {
     JS_CFUNC_DEF("write", 3, native_i2c_write),
     JS_CFUNC_DEF("read", 2, native_i2c_read),
     JS_CFUNC_DEF("writeRead", 4, native_i2c_write_read),
+    JS_CFUNC_DEF("end", 0, native_i2c_end),
     JS_PROP_END,
 };
 
 const JSClassDef js_i2c_obj = JS_OBJECT_DEF("I2C", js_i2c);
+
+static const JSPropDef js_spi[] = {
+    JS_CFUNC_DEF("begin", 6, native_spi_begin),
+    JS_CFUNC_DEF("transfer", 1, native_spi_transfer),
+    JS_CFUNC_DEF("end", 0, native_spi_end),
+    JS_PROP_END,
+};
+const JSClassDef js_spi_obj = JS_OBJECT_DEF("SPI", js_spi);
+
+static const JSPropDef js_uart[] = {
+    JS_CFUNC_DEF("begin", 3, native_uart_begin),
+    JS_CFUNC_DEF("available", 0, native_uart_available),
+    JS_CFUNC_DEF("read", 2, native_uart_read),
+    JS_CFUNC_DEF("write", 1, native_uart_write),
+    JS_CFUNC_DEF("end", 0, native_uart_end),
+    JS_PROP_END,
+};
+const JSClassDef js_uart_obj = JS_OBJECT_DEF("UART", js_uart);
 
 /* WiFi module */
 static const JSPropDef js_wifi[] = {
@@ -843,6 +862,8 @@ static const JSPropDef js_global_object[] = {
     JS_PROP_CLASS_DEF("dialog", &js_dialog_obj),
     JS_PROP_CLASS_DEF("gpio", &js_gpio_obj),
     JS_PROP_CLASS_DEF("i2c", &js_i2c_obj),
+    JS_PROP_CLASS_DEF("spi", &js_spi_obj),
+    JS_PROP_CLASS_DEF("uart", &js_uart_obj),
     JS_PROP_CLASS_DEF("ir", &js_ir_obj),
     JS_PROP_CLASS_DEF("keyboard", &js_keyboard_obj),
     JS_PROP_CLASS_DEF("notification", &js_notification_obj),

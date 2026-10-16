@@ -2,6 +2,16 @@
 #include "core/display.h"
 #include "core/mykeyboard.h"
 
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+extern void adv3in1Nrf24CriticalBegin();
+extern void adv3in1Nrf24CriticalEnd();
+class NrfKeyboardGuard {
+public:
+    NrfKeyboardGuard() { adv3in1Nrf24CriticalBegin(); }
+    ~NrfKeyboardGuard() { adv3in1Nrf24CriticalEnd(); }
+};
+#endif
+
 #define CHANNELS 80
 #define RGB565(r, g, b) ((((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)))
 uint8_t channel[CHANNELS];
@@ -12,20 +22,30 @@ String scanChannels(bool web) {
     String result = "{";
 
     uint8_t rpdValues[CHANNELS] = {0};
-    digitalWrite(bruceConfigPins.NRF24_bus.io0, LOW);
+    {
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+        NrfKeyboardGuard guard;
+#endif
+        digitalWrite(bruceConfigPins.NRF24_bus.io0, LOW);
 
-    for (int i = 0; i < CHANNELS; i++) {
-        NRFradio.setChannel(i);
-        NRFradio.startListening();
-        delayMicroseconds(128);
-        NRFradio.stopListening();
+        for (int i = 0; i < CHANNELS; i++) {
+            nrfRadio()->setChannel(i);
+            nrfRadio()->startListening();
+            delayMicroseconds(128);
+            nrfRadio()->stopListening();
 
-        int rpd = NRFradio.testRPD() ? 1 : 0;
-        channel[i] = (channel[i] * 3 + rpd * 125) / 4;
-        rpdValues[i] = channel[i];
-    }
+            int rpd = nrfRadio()->testRPD() ? 1 : 0;
+            channel[i] = (channel[i] * 3 + rpd * 125) / 4;
+            rpdValues[i] = channel[i];
+        }
 
-    digitalWrite(bruceConfigPins.NRF24_bus.io0, HIGH);
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+        digitalWrite(bruceConfigPins.NRF24_bus.io0, LOW);
+        digitalWrite(bruceConfigPins.NRF24_bus.cs, HIGH);
+#else
+        digitalWrite(bruceConfigPins.NRF24_bus.io0, HIGH);
+#endif
+    } // release the shared pins before rendering the sweep
 
     for (int i = 0; i < CHANNELS; i++) {
         int level = rpdValues[i];
@@ -61,10 +81,20 @@ void nrf_spectrum() {
     tft.drawCentreString("2.44Ghz", tftWidth / 2, tftHeight - LH, 1);
     tft.drawRightString("2.48Ghz", tftWidth, tftHeight - LH, 1);
 
-    if (nrf_start(NRF_MODE_SPI)) { // This function only works on SPI
-        NRFradio.setAutoAck(false);
-        NRFradio.disableCRC();       // accept any signal we find
-        NRFradio.setAddressWidth(2); // a reverse engineering tactic (not typically recommended)
+    bool started;
+    {
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+        NrfKeyboardGuard guard;
+#endif
+        started = nrf_start(NRF_MODE_SPI);
+    }
+    if (started) {
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+        adv3in1Nrf24CriticalBegin();
+#endif
+        nrfRadio()->setAutoAck(false);
+        nrfRadio()->disableCRC();       // accept any signal we find
+        nrfRadio()->setAddressWidth(2); // a reverse engineering tactic (not typically recommended)
         const uint8_t noiseAddress[][2] = {
             {0x55, 0x55},
             {0xAA, 0xAA},
@@ -73,15 +103,26 @@ void nrf_spectrum() {
             {0xAC, 0xAA},
             {0xAD, 0xAA}
         };
-        for (uint8_t i = 0; i < 6; ++i) { NRFradio.openReadingPipe(i, noiseAddress[i]); }
-        NRFradio.setDataRate(RF24_1MBPS);
+        for (uint8_t i = 0; i < 6; ++i) { nrfRadio()->openReadingPipe(i, noiseAddress[i]); }
+        nrfRadio()->setDataRate(RF24_1MBPS);
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+        adv3in1Nrf24CriticalEnd();
+#endif
 
         while (!check(EscPress)) {
             scanChannels();
             vTaskDelay(pdMS_TO_TICKS(1));
         }
-        NRFradio.stopListening();
-        NRFradio.powerDown();
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+        adv3in1Nrf24CriticalBegin();
+#endif
+        nrfRadio()->stopListening();
+        nrfRadio()->powerDown();
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+        digitalWrite(bruceConfigPins.NRF24_bus.io0, LOW);
+        digitalWrite(bruceConfigPins.NRF24_bus.cs, HIGH);
+        adv3in1Nrf24CriticalEnd();
+#endif
         delay(250);
         return;
 

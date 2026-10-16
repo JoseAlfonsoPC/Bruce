@@ -6,6 +6,7 @@ cd /work
 # Match .github/workflows/PR_All_envs.yml matrix envs
 DEFAULT_ENVS=(
   m5stack-cardputer
+  m5stack-cardputer-adv-3in1
   m5stack-sticks3
   m5stack-cplus2
   m5stack-cplus1_1
@@ -77,7 +78,11 @@ fi
 # Ensure platformio sees all needed platforms/packages
 platformio --version
 
-JOBS="${PIO_JOBS:-5}"
+JOBS="${PIO_JOBS:-1}"
+if [[ ! "$JOBS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "PIO_JOBS must be a positive integer" >&2
+  exit 2
+fi
 
 failed=()
 

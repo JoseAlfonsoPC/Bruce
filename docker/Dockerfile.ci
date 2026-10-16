@@ -10,7 +10,8 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 # PlatformIO + workflow deps
-RUN pip install --no-cache-dir platformio requests esptool intelhex
+COPY requirements-build.txt /tmp/requirements-build.txt
+RUN pip install --no-cache-dir -r /tmp/requirements-build.txt
 
 WORKDIR /work
 

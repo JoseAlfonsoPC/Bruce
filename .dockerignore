@@ -1,4 +1,5 @@
 .pio/
+.venv/
 .platformio/
 .git/
 .vscode/

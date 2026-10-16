@@ -22,7 +22,6 @@ SRC = [
 CFLAGS = [
     "-Wall",
     "-O2",
-    "-m32",
     "-I" + MQJS_PATH,
 ]
 
@@ -40,6 +39,7 @@ INCLUDES = [
     'globals_js',
     'gpio_js',
     'i2c_js',
+    'hardware_js',
     'ir_js',
     'keyboard_js',
     'led_js',
@@ -110,7 +110,9 @@ def _normalize_option_value(value) -> str:
 def compute_signature():
     # Any change here should force a rebuild.
     parts = []
-    parts.append("v=3")
+    parts.append("v=4")
+    parts.append(f"generator_sha256={sha256_file('gen_mqjs_headers.py')}")
+    parts.append(f"classes_sha256={sha256_file(os.path.join(BJS_INTERPRETER_PATH, 'user_classes_js.h'))}")
     parts.append(f"watch_sha256={sha256_file(WATCH_FILE)}")
 
     mqjs_build_c = os.path.join(MQJS_PATH, "mquickjs_build.c")
@@ -123,6 +125,8 @@ def compute_signature():
     return h.hexdigest()
 
 def needs_rebuild():
+    if not os.path.exists(os.path.join(BUILD_DIR, "mquickjs_atom.h")):
+        return True
     if not os.path.exists(os.path.join(BJS_INTERPRETER_PATH, "mqjs_stdlib.h")):
         return True
     if not os.path.exists(BUILD_SHA256):

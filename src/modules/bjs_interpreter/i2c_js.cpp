@@ -1,137 +1,138 @@
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
 #include "i2c_js.h"
-
+#include "hardware_js.h"
 #include "core/bus_HAL.h"
-#include "helpers_js.h"
 
-// Bus acquired by i2c.begin() and reused by every other native_i2c_* call until the script
-// re-runs i2c.begin() with different pins (or a fresh interpreter run acquires it again).
 static TwoWire *jsI2CBus = nullptr;
+static bool jsI2CPendingStop = false;
 
-static void i2c_require_ready(JSContext *ctx) {
-    JSValue global = JS_GetGlobalObject(ctx);
-    JSValue v = JS_GetPropertyStr(ctx, global, "\xffi2c_ready");
-    bool ready = JS_IsBool(v) ? JS_ToBool(ctx, v) : false;
-    if (!ready) JS_ThrowInternalError(ctx, "i2c not initialized: call i2c.begin(sda,scl,hz) first");
+static void i2c_finish_pending() {
+    if (jsI2CBus && jsI2CPendingStop) jsI2CBus->endTransmission(true);
+    jsI2CPendingStop = false;
 }
 
-JSValue native_i2c_begin(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
-    if (argc < 3 || !JS_IsNumber(ctx, argv[0]) || !JS_IsNumber(ctx, argv[1]) || !JS_IsNumber(ctx, argv[2])) {
-        return JS_ThrowTypeError(ctx, "i2c.begin(sda:int, scl:int, hz:int) is required");
+static bool i2c_ready(JSContext *ctx) {
+    if (jsI2CBus) return true;
+    JS_ThrowInternalError(ctx, "call i2c.begin first");
+    return false;
+}
+
+void js_i2c_end() {
+    i2c_finish_pending();
+    if (jsI2CBus) releaseI2CBus();
+    jsI2CBus = nullptr;
+}
+
+JSValue native_i2c_begin(JSContext *ctx, JSValue *, int argc, JSValue *argv) {
+    if (argc < 3) return JS_ThrowTypeError(ctx, "i2c.begin(sda,scl,hz) required");
+    int sda, scl, hz;
+    if (!js_bus_pin(ctx, argv[0], true, sda) || !js_bus_pin(ctx, argv[1], true, scl) ||
+        !js_bus_int(ctx, argv[2], 1000, 1000000, hz)) return JS_EXCEPTION;
+    if (sda == scl) return JS_ThrowRangeError(ctx, "I2C SDA and SCL must be distinct");
+    js_i2c_end();
+    jsI2CBus = acquireI2CBus(static_cast<int8_t>(sda), static_cast<int8_t>(scl));
+    if (!jsI2CBus) return JS_ThrowInternalError(ctx, "no I2C bus available");
+    // Preserve the clock/timeout of the keyboard and other system peripherals.
+    if (jsI2CBus != getSysI2CBus()) {
+        jsI2CBus->setClock(hz);
+        jsI2CBus->setTimeOut(50);
     }
-    int sda = 0, scl = 0;
-    uint32_t hz = 0;
-    JS_ToInt32(ctx, &sda, argv[0]);
-    JS_ToInt32(ctx, &scl, argv[1]);
-    JS_ToUint32(ctx, &hz, argv[2]);
-    if (sda < 0 || scl < 0) return JS_ThrowRangeError(ctx, "i2c.begin: pins must be >= 0");
-    if (hz < 1000 || hz > 1000000) return JS_ThrowRangeError(ctx, "i2c.begin: hz must be 1k..1MHz");
-
-    jsI2CBus = acquireI2CBus((int8_t)sda, (int8_t)scl);
-    jsI2CBus->setClock(hz);
-    jsI2CBus->setTimeOut(50);
-
-    JSValue global = JS_GetGlobalObject(ctx);
-    JS_SetPropertyStr(ctx, global, "\xffi2c_ready", JS_NewBool(true));
     return JS_NewBool(true);
 }
 
-JSValue native_i2c_scan(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
-    i2c_require_ready(ctx);
-    JSValue arr = JS_NewArray(ctx, 127);
-    uint32_t idx = 0;
-    for (uint8_t a = 1; a < 127; a++) {
-        jsI2CBus->beginTransmission(a);
-        if (jsI2CBus->endTransmission(true) == 0) { JS_SetPropertyUint32(ctx, arr, idx++, JS_NewInt32(ctx, a)); }
+JSValue native_i2c_scan(JSContext *ctx, JSValue *, int, JSValue *) {
+    if (!i2c_ready(ctx)) return JS_EXCEPTION;
+    i2c_finish_pending();
+    std::vector<uint8_t> addresses;
+    for (uint8_t address = 1; address < 127; address++) {
+        jsI2CBus->beginTransmission(address);
+        if (jsI2CBus->endTransmission(true) == 0) addresses.push_back(address);
     }
-    return arr;
-}
-
-JSValue native_i2c_write(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
-    i2c_require_ready(ctx);
-    int addr = 0;
-    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &addr, argv[0]);
-    std::vector<uint8_t> tmp;
-    const uint8_t *buf = NULL;
-    size_t len = 0;
-    if (argc < 2) return JS_ThrowTypeError(ctx, "i2c.write: arg1 must be Uint8Array or string");
-
-    if (JS_IsString(ctx, argv[1])) {
-        JSCStringBuf sb;
-        const char *s = JS_ToCStringLen(ctx, &len, argv[1], &sb);
-        if (!s) return JS_ThrowTypeError(ctx, "i2c.write: invalid string argument");
-        tmp.assign((const uint8_t *)s, (const uint8_t *)s + len);
-        buf = tmp.data();
-    } else if (JS_IsTypedArray(ctx, argv[1])) {
-        const char *b = JS_GetTypedArrayBuffer(ctx, &len, argv[1]);
-        if (!b) return JS_ThrowTypeError(ctx, "i2c.write: invalid typed array argument");
-        buf = (const uint8_t *)b;
-    } else {
-        return JS_ThrowTypeError(ctx, "i2c.write: arg1 must be Uint8Array or string");
+    JSGCRef reference;
+    JSValue *result = JS_PushGCRef(ctx, &reference);
+    *result = JS_NewArray(ctx, addresses.size());
+    if (!JS_IsException(*result)) {
+        for (size_t index = 0; index < addresses.size(); index++) {
+            if (JS_IsException(JS_SetPropertyUint32(ctx, *result, index, JS_NewInt32(ctx, addresses[index])))) {
+                JS_PopGCRef(ctx, &reference);
+                return JS_EXCEPTION;
+            }
+        }
     }
-    bool sendStop = true;
-    if (argc > 2) sendStop = JS_ToBool(ctx, argv[2]);
-
-    jsI2CBus->beginTransmission((uint8_t)addr);
-    jsI2CBus->write(buf, (size_t)len);
-    uint8_t err = jsI2CBus->endTransmission(sendStop);
-    return JS_NewInt32(ctx, err);
+    return JS_PopGCRef(ctx, &reference);
 }
 
-JSValue native_i2c_read(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
-    i2c_require_ready(ctx);
-    int addr = 0;
-    int len = 0;
-    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &addr, argv[0]);
-    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &len, argv[1]);
-    size_t got = jsI2CBus->requestFrom((uint8_t)addr, (uint8_t)len, (uint8_t)true);
-    std::vector<uint8_t> buf(got);
-    for (size_t i = 0; i < got && jsI2CBus->available(); i++) buf[i] = jsI2CBus->read();
-    // TODO: Create JS_NewArrayBufferCopy in MicroQuickJS
-    // JSValue arrbuf = JS_NewArrayBufferCopy(ctx, (const uint8_t *)buf.data(), got);
-    // return arrbuf;
-    return JS_ThrowInternalError(ctx, "i2c.read: not implemented");
-}
-
-JSValue native_i2c_write_read(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
-    i2c_require_ready(ctx);
-    int addr = 0;
-    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &addr, argv[0]);
-    std::vector<uint8_t> tmp;
-    const uint8_t *wbuf = NULL;
-    size_t wlen = 0;
-    if (argc < 3) return JS_ThrowTypeError(ctx, "i2c.writeRead: arg1 must be Uint8Array or string");
-
-    if (JS_IsString(ctx, argv[1])) {
-        JSCStringBuf sb;
-        const char *s = JS_ToCStringLen(ctx, &wlen, argv[1], &sb);
-        if (!s) return JS_ThrowTypeError(ctx, "i2c.writeRead: invalid string argument");
-        tmp.assign((const uint8_t *)s, (const uint8_t *)s + wlen);
-        wbuf = tmp.data();
-    } else if (JS_IsTypedArray(ctx, argv[1])) {
-        const char *b = JS_GetTypedArrayBuffer(ctx, &wlen, argv[1]);
-        if (!b) return JS_ThrowTypeError(ctx, "i2c.writeRead: invalid typed array argument");
-        wbuf = (const uint8_t *)b;
-    } else {
-        return JS_ThrowTypeError(ctx, "i2c.writeRead: arg1 must be Uint8Array or string");
+JSValue native_i2c_write(JSContext *ctx, JSValue *, int argc, JSValue *argv) {
+    if (!i2c_ready(ctx)) return JS_EXCEPTION;
+    if (argc < 2) return JS_ThrowTypeError(ctx, "i2c.write(address,data[,stop]) required");
+    int address;
+    std::vector<uint8_t> data;
+    if (!js_bus_int(ctx, argv[0], 1, 126, address) || !js_bus_bytes(ctx, argv[1], 128, data))
+        return JS_EXCEPTION;
+    bool stop = argc < 3 || JS_ToBool(ctx, argv[2]);
+    i2c_finish_pending();
+    jsI2CBus->beginTransmission(address);
+    if (!data.empty() && jsI2CBus->write(data.data(), data.size()) != data.size()) {
+        jsI2CBus->endTransmission(true);
+        return JS_NewInt32(ctx, 1);
     }
-    int rlen = 0;
-    if (JS_IsNumber(ctx, argv[2])) JS_ToInt32(ctx, &rlen, argv[2]);
-    int wait = 0;
-    if (argc > 3 && JS_IsNumber(ctx, argv[3])) JS_ToInt32(ctx, &wait, argv[3]);
-
-    jsI2CBus->beginTransmission((uint8_t)addr);
-    jsI2CBus->write(wbuf, (size_t)wlen);
-    uint8_t err = jsI2CBus->endTransmission(false);
-    if (err != 0) { return JS_NewInt32(ctx, -err); }
-    if (wait > 0) delay(wait);
-    size_t got = jsI2CBus->requestFrom((uint8_t)addr, (uint8_t)rlen, (uint8_t)true);
-    std::vector<uint8_t> buf(got);
-    for (size_t i = 0; i < got && jsI2CBus->available(); i++) buf[i] = jsI2CBus->read();
-    // TODO: Create JS_NewArrayBufferCopy in MicroQuickJS
-    // JSValue arrbuf = JS_NewArrayBufferCopy(ctx, (const uint8_t *)buf.data(), got);
-    // return arrbuf;
-    return JS_ThrowInternalError(ctx, "i2c.writeRead: not implemented");
+    uint8_t error = jsI2CBus->endTransmission(stop);
+    jsI2CPendingStop = !stop;
+    if (error) i2c_finish_pending();
+    return JS_NewInt32(ctx, error);
 }
 
+static JSValue i2c_read_bytes(JSContext *ctx, int address, int length) {
+    std::vector<uint8_t> data;
+    if (length) {
+        size_t received = jsI2CBus->requestFrom(static_cast<uint8_t>(address),
+                                              static_cast<size_t>(length), true);
+        jsI2CPendingStop = false;
+        data.reserve(received);
+        while (data.size() < received && jsI2CBus->available()) {
+            int byte = jsI2CBus->read();
+            if (byte < 0) break;
+            data.push_back(static_cast<uint8_t>(byte));
+        }
+    } else i2c_finish_pending();
+    return JS_NewUint8ArrayCopy(ctx, data.data(), data.size());
+}
+
+JSValue native_i2c_read(JSContext *ctx, JSValue *, int argc, JSValue *argv) {
+    if (!i2c_ready(ctx)) return JS_EXCEPTION;
+    if (argc < 2) return JS_ThrowTypeError(ctx, "i2c.read(address,length) required");
+    int address, length;
+    if (!js_bus_int(ctx, argv[0], 1, 126, address) || !js_bus_int(ctx, argv[1], 0, 128, length))
+        return JS_EXCEPTION;
+    return i2c_read_bytes(ctx, address, length);
+}
+
+JSValue native_i2c_write_read(JSContext *ctx, JSValue *, int argc, JSValue *argv) {
+    if (!i2c_ready(ctx)) return JS_EXCEPTION;
+    if (argc < 3) return JS_ThrowTypeError(ctx, "i2c.writeRead(address,data,length[,waitMs]) required");
+    int address, length, wait = 0;
+    std::vector<uint8_t> data;
+    if (!js_bus_int(ctx, argv[0], 1, 126, address) || !js_bus_bytes(ctx, argv[1], 128, data) ||
+        !js_bus_int(ctx, argv[2], 0, 128, length) ||
+        (argc > 3 && !js_bus_int(ctx, argv[3], 0, 1000, wait))) return JS_EXCEPTION;
+    i2c_finish_pending();
+    jsI2CBus->beginTransmission(address);
+    if (!data.empty() && jsI2CBus->write(data.data(), data.size()) != data.size()) {
+        jsI2CBus->endTransmission(true);
+        return JS_NewInt32(ctx, -1);
+    }
+    uint8_t error = jsI2CBus->endTransmission(length == 0);
+    jsI2CPendingStop = length != 0;
+    if (error) {
+        i2c_finish_pending();
+        return JS_NewInt32(ctx, -error);
+    }
+    if (wait) delay(wait);
+    return i2c_read_bytes(ctx, address, length);
+}
+
+JSValue native_i2c_end(JSContext *, JSValue *, int, JSValue *) {
+    js_i2c_end();
+    return JS_UNDEFINED;
+}
 #endif
