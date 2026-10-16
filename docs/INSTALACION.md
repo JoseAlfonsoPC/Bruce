@@ -41,7 +41,7 @@ pio project config
 pio run -e m5stack-cardputer-adv-3in1
 ```
 
-El perfil `m5stack-cardputer-adv-3in1` aplica el cableado y la multiplexación de GPIO8/9 de la expansión y es el predeterminado de esta entrega. `pio run` lo selecciona automáticamente. El perfil general `m5stack-cardputer` sigue disponible para Cardputer sin esa expansión; selecciónalo explícitamente con `-e`.
+El perfil `m5stack-cardputer-adv-3in1` aplica el cableado y la multiplexación de GPIO8/9 de la expansión; selecciónalo explícitamente con `-e m5stack-cardputer-adv-3in1`. `pio run` conserva el perfil general `m5stack-cardputer` como configuración predeterminada del proyecto oficial.
 
 Se generan:
 
