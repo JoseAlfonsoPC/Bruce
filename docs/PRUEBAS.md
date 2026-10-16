@@ -21,6 +21,7 @@ Las pruebas usan la biblioteca estándar de Python y un compilador C++17. El eje
 | Transporte NRF24 | CE ausente, pines repetidos o inválidos, MISO en entrada, conflictos UART incluyendo CE, consola ocupada y restricción SPI del perfil 3 en 1 |
 | Decodificador ESB pasivo y diagnóstico | 32.140 comprobaciones: codificación independiente por bits/división polinómica, ambos alineamientos, longitudes 0–23, PID/no-ack, captura vacía, truncamiento, corrupción de cada bit protegido y estadísticas de ruido/vacíos/datos, metadatos de la última captura e inicio de nuevo escaneo |
 | UART | Inicialización, lectura binaria, timeout, escritura, límites y cierre |
+| Detección FM | 179 comprobaciones generales y 191 del perfil 3 en 1 sobre el código FM real: ocho puntos de entrada con NACK/error/timeout, controlador no invocado, liberación del bus antes del error, pines inválidos o compartidos, ausencia de bus, fallo de inicio, estado obsoleto y cancelación sin emitir |
 | Monitor USB POSIX | Lectura binaria mediante pseudoterminal, HUPCL desactivado, cierre tras errores, duraciones acotadas y filtrado de configuración en consola |
 
 Los buses se simulan para comprobar contratos y límites. Estas pruebas no miden temporización eléctrica, nivel RF ni la respuesta real del módulo.
@@ -56,6 +57,7 @@ Los ensayos funcionales que no constan como realizados siguen **pendientes en el
 | UART | Ejecutar `uart_loopback.js` con el puente indicado; recibir `00 55 AA FF` |
 | CC1101 | Inicializar y recibir una señal de prueba propia en la banda/antena del módulo |
 | LoRa SX1262 | Seleccionar SX1262 y frecuencia; intercambiar un mensaje de prueba con un segundo equipo compatible |
+| FM en el perfil 3 en 1 | Verificado en el ADV: FM visible; Spectrum y Stop muestran `Si4713 not found`, mantienen el aviso hasta una tecla y permiten volver al menú con Esc remoto. Después, NRF24 Hardware check completó 37 muestras y 0 fallos. No se activaron transmisiones; teclado físico y uso de un Si4713 real siguen pendientes |
 | NRF24 Hardware check | Mantener `SPI: OK`, `RX CE: HIGH` y `Failures: 0` mientras se pulsan teclas; salir con Esc |
 | NRF24 Information | Ver transporte, respuesta SPI y pines; mantener Enter/G0 al abrirla y comprobar que solo se cierra con Esc |
 | MouseJack: modo | Abrir `NRF Mode: SPI`, seleccionar SPI o cancelar; regresar a MouseJack conservando el modo |

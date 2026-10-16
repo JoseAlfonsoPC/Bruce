@@ -14,7 +14,8 @@ Los menús se construyen en `src/core/main_menu.cpp`. La presencia de una opció
 | LoRa | Configuración y mensajería | SX1262/SX1276 compatible |
 | IR | Recepción/transmisión de infrarrojos | Emisor/receptor y GPIO correctos |
 | RFID | Lectura, archivos y operaciones según módulo | PN532, ST25R3916 u otros controladores admitidos |
-| Ethernet, GPS y FM | Herramientas específicas | Módulos externos correspondientes |
+| Ethernet y GPS | Herramientas específicas | Módulos externos correspondientes |
+| FM | Emisión y medición FM mediante Si4713 | Si4713 independiente; sin respuesta en I²C muestra `Si4713 not found` y permite volver con una tecla |
 | Files y Scripts | Archivos y JavaScript | SD/LittleFS; intérprete en versión completa |
 | Clock, Others y Config | Reloj, utilidades y ajustes | Capacidades de la placa |
 

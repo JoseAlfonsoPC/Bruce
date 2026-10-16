@@ -47,7 +47,7 @@ def read_chunks(fd, seconds):
 def diagnostic_line(line):
     """Avoid printing startup configuration and identifiers to the terminal."""
     return bool(re.match(
-        r"^(?:\[MJ scan(?: info)?\]|\[NRF24 check\]|\[boot\]|\[RAMLOG\]|"
+        r"^(?:\[MJ scan(?: info)?\]|\[NRF24 check\]|\[FM\]|\[boot\]|\[RAMLOG\]|"
         r"rst:|ESP-ROM:|Guru Meditation|panic\(|Backtrace:|Rebooting|Brownout|Uptime:)",
         line))
 

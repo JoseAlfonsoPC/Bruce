@@ -4,7 +4,7 @@
   "python": "3.11",
   "platformio": "6.2.0",
   "pioarduino": "55.03.39",
-  "pruebas_python": 24,
+  "pruebas_python": 25,
   "comprobaciones_buses": {
     "general": 57,
     "adv_3in1": 59
@@ -21,7 +21,7 @@
   ],
   "ejemplos_compilados_microquickjs": 3,
   "documentos_con_enlaces_locales_comprobados": 13,
-  "validacion_fisica": "instalacion, arranque USB e inicializacion SPI verificados; barrido controlado 120 s sin reinicios y cierre por Esc remoto; segundo resumen tras actividad confirmada: 10668 capturas, 7 con CRC valido y payload vacio, 0 con datos, 0 identificados, duracion sin delimitar; persistencia de Scan Info comprobada; teclado fisico y otras pruebas pendientes",
+  "validacion_fisica": "Revision actual instalada y verificada; Launcher, tabla y NVS conservados durante grabacion. Bruce arranca con FM visible; FM Spectrum y Stop muestran Si4713 not found, conservan el aviso hasta una tecla y vuelven al menu mediante Esc remoto. Despues, NRF24 Hardware check: 37 muestras, 0 fallos; vuelta al menu principal. No se activaron transmisiones. Teclado fisico, reconocimiento Logitech y otras pruebas RF siguen pendientes; ensayos anteriores registrados por separado.",
   "consulta_version_usb": "Bruce vdev; SDK v5.5.4-dirty; M5Stack Cardputer",
   "firmware_instalado_desde_esta_sesion": true,
   "instalacion_usb": {
@@ -29,8 +29,8 @@
     "particion_existente": "brucea",
     "direccion_aplicacion": "0x170000",
     "capacidad_particion_bytes": 4128768,
-    "aplicacion_bytes": 4117648,
-    "sha256_aplicacion": "49c0f6f2d0bdf0b9fefde5a75cd86b1294867dc387c6e7b9c7a5cf5dea75f998",
+    "aplicacion_bytes": 4117968,
+    "sha256_aplicacion": "c0bad74d15415ff12c6a05fc83b68cf37151fe23a8ace306e054d8cf345089ce",
     "verificacion_flash": "esptool verify-flash: digest matched",
     "cargador_rom": true,
     "launcher_conservado": true,
@@ -38,7 +38,7 @@
     "otras_aplicaciones_fuera_del_rango_de_escritura": true,
     "arranque_seleccionado": "ota_0: brucea; secuencia 4",
     "copia_anterior_selector_ota_conservada": true,
-    "respuestas_info_recibidas": 2,
+    "respuestas_info_recibidas": 0,
     "panic_detectado_durante_comprobacion": false,
     "copia_completa_bytes": 8388608,
     "copia_local": ".pio/backups/cardputer-adv-before-install-20261016-ssoffskr.bin",
@@ -50,26 +50,40 @@
     "deteccion_perifericos_MouseJack": "usuario notifica CRC=1 y Found=0 tras actualizar; periférico sin identificar",
     "transmisiones_activadas_desde_ordenador": false,
     "actualizacion_captura_ESB": true,
-    "diagnostico_Scan_Info_instalado": true
+    "diagnostico_Scan_Info_instalado": true,
+    "fecha_ultima_actualizacion": "2026-10-17",
+    "FM_Si4713_excluido": false,
+    "arranque_tras_reinicio_completo_verificado": true,
+    "diagnostico_NRF24_muestras": 37,
+    "diagnostico_NRF24_fallos": 0,
+    "FM_deteccion_previa_implementada": true,
+    "FM_visible_y_aviso_ausencia_comprobados": true,
+    "identificador_ELF_actual": "db4a6734253e18bd56945b5db55164896bd71451d75b723261913acb0f813146"
   },
   "compilaciones": [
     {
       "entorno": "m5stack-cardputer",
       "resultado": "SUCCESS",
-      "aplicacion_bytes": 4114960,
+      "aplicacion_bytes": 4115216,
       "particion_aplicacion_bytes": 5111808,
-      "imagen_combinada_bytes": 4180496,
-      "sha256": "8b4fe204ac2d9bc52e858aab09e9e6201085d151f7928084543ad5598567a376",
-      "coincide_con_imagen_factory_platformio": true
+      "imagen_combinada_bytes": 4180752,
+      "sha256": "7ad64fdd136adf220203b0c44145be0a8adc457b476c6cf9e42fc8f7c327f137",
+      "coincide_con_imagen_factory_platformio": true,
+      "fecha": "2026-10-17",
+      "FM_Si4713_excluido": false,
+      "deteccion_Si4713_previa_al_controlador": true
     },
     {
       "entorno": "m5stack-cardputer-adv-3in1",
       "resultado": "SUCCESS",
-      "aplicacion_bytes": 4117648,
+      "aplicacion_bytes": 4117968,
       "particion_aplicacion_bytes": 5111808,
-      "imagen_combinada_bytes": 4183184,
-      "sha256": "56acdebb1e2807ee984bf9e1b02b7565b78e667bffd0515ac2c19086d9cc83af",
-      "coincide_con_imagen_factory_platformio": true
+      "imagen_combinada_bytes": 4183504,
+      "sha256": "b77e4a17aa94c08253ab85d14dfa66132dbf036a9777c3d152dbbff4e3615cc8",
+      "coincide_con_imagen_factory_platformio": true,
+      "fecha": "2026-10-17",
+      "FM_Si4713_excluido": false,
+      "deteccion_Si4713_previa_al_controlador": true
     }
   ],
   "comprobaciones_transporte_nrf24": 16,
@@ -126,7 +140,7 @@
     "explicit_DTR_RTS_operations": false,
     "HUPCL": false
   },
-  "fecha_compilaciones": "2026-10-16",
+  "fecha_compilaciones": "2026-10-17",
   "barrido_controlado_con_monitor_corregido": {
     "date": "2026-10-16",
     "firmware": "Scan Info; ELF 7db8554d4",
@@ -170,5 +184,183 @@
     },
     "left_open_on_device": "MouseJack / Scan Info",
     "reset_marker_during_final_navigation": false
+  },
+  "ajuste_FM_para_modulo_3en1": {
+    "fecha": "2026-10-17",
+    "informe_usuario": "las opciones FM se bloquean",
+    "hardware_confirmado_por_usuario": "solo expansion LoRa/CC1101/NRF24; sin Si4713 independiente",
+    "cambio": "Excluir FM_SI4713=1 y FM_RSTPIN=40 heredados del perfil Cardputer",
+    "perfil_general_conserva_FM_Si4713": true,
+    "funciones_FM_ausentes_en_ELF": true,
+    "NRF24_RF_LoRa_presentes_en_ELF": true,
+    "identificador_ELF_Bruce": "fd04bfd2038079405b3412393593052918b112789961f4cef78134e68185052c",
+    "aplicacion_bytes": 4111456,
+    "sha256_aplicacion": "01ff17b47eb20a8e7b1ac12181054564ec725c061233080ff2f255b26c3931a3",
+    "instalacion_nueva_revision": "verificada: solo aplicacion brucea en 0x170000; Launcher y metadatos conservados",
+    "validacion_menu_USB": {
+      "date": "2026-10-17",
+      "explicit_DTR_RTS_operations": false,
+      "HUPCL": false,
+      "radio_transmission_activated": false,
+      "main_menu_labels": [
+        "WiFi",
+        "BLE",
+        "RF",
+        "NRF24",
+        "LoRa",
+        "IR",
+        "Ethernet",
+        "GPS",
+        "RFID",
+        "Files",
+        "JS Interpreter",
+        "Clock",
+        "Others",
+        "Config"
+      ],
+      "FM_absent": true,
+      "RF_NRF24_LoRa_present": true,
+      "NRF24_hardware_check": {
+        "samples": 30,
+        "failures": 0,
+        "passive": true
+      },
+      "returned_to_main_menu": true,
+      "uptime_after_validation": "00:00:22",
+      "status": "passed"
+    },
+    "informe_instalacion": {
+      "date": "2026-10-17",
+      "environment": "m5stack-cardputer-adv-3in1",
+      "partition": {
+        "type": 0,
+        "subtype": 16,
+        "offset": 1507328,
+        "size": 4128768,
+        "label": "brucea"
+      },
+      "application_bytes": 4111456,
+      "application_sha256": "01ff17b47eb20a8e7b1ac12181054564ec725c061233080ff2f255b26c3931a3",
+      "merged_sha256": "89fe06b4775de698de6f33250f2ca7d49d14d525d1e522b8a6b2ac7fd8ee8878",
+      "previous_application": ".pio/backups/cardputer-adv-esb-info-installed.bin",
+      "backup": ".pio/backups/cardputer-adv-before-install-20261016-ssoffskr.bin",
+      "status": "verified",
+      "radio_transmission_activated": false,
+      "verification": "esptool verify-flash",
+      "bootloader_partition_table_nvs_ota_metadata_unchanged": true,
+      "other_partitions_outside_write_range": true,
+      "reset_requested": true
+    },
+    "estado_pantalla_notificado_tras_grabacion": "pantalla negra o modo descarga",
+    "siguiente_paso_arranque": "completado: menu principal de Bruce accesible por USB tras reinicio completo; FM ausente y NRF24 probado en recepcion",
+    "recuperacion_arranque_sin_regrabar_flash": {
+      "date": "2026-10-17",
+      "flash_modified": false,
+      "efuses_modified": false,
+      "status": "reset-requested-and-boot-verified",
+      "ROM_connected_with_explicit_USB_reset_sequence": true,
+      "force_download_before": false,
+      "GPIO0_sampled_high": false,
+      "force_download_after": false,
+      "intentional_watchdog_reset_requested": true,
+      "exception_during_post_reset_USB_read": "SerialException: Could not configure port: (6, 'Device not configured')",
+      "post_reset_USB_verification": ".pio/backups/cardputer-adv-fm-profile-usb-recovered-20261017.json",
+      "interpretation": "USB device disconnected after the intentional watchdog reset; subsequent menu queries and passive NRF24 hardware check succeeded."
+    }
+  },
+  "instalacion_previa_ajuste_FM": {
+    "aplicacion_bytes": 4117648,
+    "sha256_aplicacion": "49c0f6f2d0bdf0b9fefde5a75cd86b1294867dc387c6e7b9c7a5cf5dea75f998",
+    "nrf24_inicializacion_comprobada": true,
+    "nrf24_respuesta_spi_comprobada": true,
+    "respuestas_info_recibidas": 2,
+    "fecha": "2026-10-16",
+    "identificador_ELF": "7db8554d4"
+  },
+  "comprobaciones_FM": {
+    "general": 179,
+    "adv_3in1": 191
+  },
+  "FM_visible_con_deteccion_previa": {
+    "fecha": "2026-10-17",
+    "peticion_usuario": "Mantener FM visible y mostrar mensaje si falta el modulo",
+    "direccion_I2C": "0x63",
+    "pines_por_defecto_ADV": "SDA2/SCL1 Grove",
+    "timeout_transaccion_ms": 50,
+    "GPIO8_9_protegidos_en_perfil_3en1": true,
+    "mensaje_ausencia": "Si4713 not found",
+    "libera_bus_antes_del_error": true,
+    "aborta_opciones_tras_fallo_de_inicio": true,
+    "pruebas_host": "25 pruebas; FM 179/191 con ASan y UBSan",
+    "aplicacion_bytes": 4117968,
+    "sha256_aplicacion": "c0bad74d15415ff12c6a05fc83b68cf37151fe23a8ace306e054d8cf345089ce",
+    "identificador_ELF_Bruce": "db4a6734253e18bd56945b5db55164896bd71451d75b723261913acb0f813146",
+    "instalacion": {
+      "date": "2026-10-17",
+      "environment": "m5stack-cardputer-adv-3in1",
+      "partition": {
+        "type": 0,
+        "subtype": 16,
+        "offset": 1507328,
+        "size": 4128768,
+        "label": "brucea"
+      },
+      "application_bytes": 4117968,
+      "application_sha256": "c0bad74d15415ff12c6a05fc83b68cf37151fe23a8ace306e054d8cf345089ce",
+      "merged_sha256": "b77e4a17aa94c08253ab85d14dfa66132dbf036a9777c3d152dbbff4e3615cc8",
+      "previous_application": ".pio/backups/cardputer-adv-fm-profile-installed.bin",
+      "backup": ".pio/backups/cardputer-adv-before-install-20261016-ssoffskr.bin",
+      "status": "verified",
+      "radio_transmission_activated": false,
+      "verification": "esptool verify-flash",
+      "bootloader_partition_table_nvs_ota_metadata_unchanged": true,
+      "other_partitions_outside_write_range": true,
+      "reset_method": "ESP32-S3: clear force-download bit and intentional watchdog reset",
+      "reset_requested": true
+    },
+    "prueba_USB": {
+      "date": "2026-10-17",
+      "explicit_DTR_RTS_operations": false,
+      "HUPCL": false,
+      "radio_transmission_activated": false,
+      "FM_missing_module_cases": [
+        {
+          "option": "FM Spectrum",
+          "message": "Si4713 not found",
+          "held_until_key": true,
+          "returned_to_main_menu": true
+        },
+        {
+          "option": "Brdcast stop",
+          "message": "Si4713 not found",
+          "held_until_key": true,
+          "returned_to_main_menu": true
+        }
+      ],
+      "main_menu_labels": [
+        "WiFi",
+        "BLE",
+        "RF",
+        "NRF24",
+        "LoRa",
+        "FM",
+        "IR",
+        "Ethernet",
+        "GPS",
+        "RFID",
+        "Files",
+        "JS Interpreter",
+        "Clock",
+        "Others",
+        "Config"
+      ],
+      "NRF24_after_FM_errors": {
+        "samples": 37,
+        "failures": 0,
+        "passive": true
+      },
+      "uptime_after_validation": "00:00:49",
+      "status": "passed"
+    }
   }
 }

@@ -1,11 +1,63 @@
 #ifndef LITE_VERSION
 #include "fm.h"
+#include "core/bus_HAL.h"
 #include "core/utils.h"
+#include <driver/gpio.h>
 
 bool auto_scan = false;
 bool is_running = false;
 uint16_t fm_station = 10230; // Default set to 102.30 MHz
 Adafruit_Si4713 radio = Adafruit_Si4713();
+
+namespace {
+bool ownsI2cBus = false;
+
+void fm_releaseBus() {
+    if (ownsI2cBus) releaseI2CBus();
+    ownsI2cBus = false;
+}
+
+void fm_error(const char *message) {
+    // The error screen must not hold the external bus while waiting for input.
+    fm_releaseBus();
+    is_running = false;
+    check(AnyKeyPress);
+    check(SelPress);
+    Serial.print("[FM] ");
+    Serial.println(message);
+    displayError(message, true);
+}
+
+TwoWire *fm_probe() {
+    const int sda = bruceConfigPins.i2c_bus.sda;
+    const int scl = bruceConfigPins.i2c_bus.scl;
+    if (!GPIO_IS_VALID_OUTPUT_GPIO(sda) || !GPIO_IS_VALID_OUTPUT_GPIO(scl) || sda == scl) {
+        fm_error("FM I2C pins invalid");
+        return nullptr;
+    }
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+    if (sda == 8 || sda == 9 || scl == 8 || scl == 9) {
+        fm_error("FM: use Grove I2C");
+        return nullptr;
+    }
+#endif
+    TwoWire *wire = acquireI2CBus(sda, scl);
+    if (!wire) {
+        fm_error("FM I2C unavailable");
+        return nullptr;
+    }
+    ownsI2cBus = true;
+    wire->setTimeOut(50);
+    // Detect at the address used by the existing driver before entering its
+    // CTS polling loops. Use configured pins instead of Arduino board defaults.
+    wire->beginTransmission(SI4710_ADDR1);
+    if (wire->endTransmission() != 0) {
+        fm_error("Si4713 not found");
+        return nullptr;
+    }
+    return wire;
+}
+} // namespace
 
 void set_auto_scan(bool new_value) { auto_scan = new_value; }
 
@@ -47,7 +99,7 @@ uint16_t fm_scan() {
         }
     }
 
-    sprintf(display_freq, "Found %d MHz", freq_candidate);
+    snprintf(display_freq, sizeof(display_freq), "Found %d MHz", freq_candidate);
     tft.fillScreen(bruceConfig.bgColor);
     displayTextLine(display_freq);
     while (!check(EscPress) && !check(SelPress)) { delay(100); }
@@ -76,7 +128,7 @@ void fm_options_frq(uint16_t f_min, bool reserved) {
 
     options = {};
     for (uint16_t f = f_min; f < f_max; f += 10) {
-        sprintf(f_str, "%d Hz", f);
+        snprintf(f_str, sizeof(f_str), "%d Hz", f);
         options.push_back({f_str, [=]() { set_frq(f); }});
     }
     addOptionToMainMenu();
@@ -111,7 +163,7 @@ void fm_options_digit(uint16_t f_min, bool reserved) {
 
     options = {};
     for (uint16_t f = f_min; f < f_max; f += 1) {
-        sprintf(f_str, "%d MHz", f);
+        snprintf(f_str, sizeof(f_str), "%d MHz", f);
         options.push_back({f_str, [=]() { fm_options_frq(f, reserved); }});
     }
     addOptionToMainMenu();
@@ -132,7 +184,7 @@ void fm_options(uint16_t f_min, uint16_t f_max, bool reserved) {
         options.push_back({"Auto", [=]() { set_auto_scan(true); }});
     }
     for (uint16_t f = f_min; f < f_max; f += 10) {
-        sprintf(f_str, "%d MHz", f);
+        snprintf(f_str, sizeof(f_str), "%d MHz", f);
         options.push_back({f_str, [=]() { fm_options_digit(f, reserved); }});
     }
     addOptionToMainMenu();
@@ -160,18 +212,19 @@ void fm_live_run(bool reserved) {
 
     // Run radio broadcast
     if (!returnToMenu and fm_station != 0) {
-        fm_setup(false, true); // Don't know why but IT WORKS ONLY when launched 2 times...
+        if (!fm_setup(false, true)) return;
         while (!check(EscPress) && !check(SelPress)) { delay(100); }
     }
+    if (!is_running) fm_releaseBus();
 }
 
 void fm_ta_run() {
     // Set Info Traffic
     fm_station = 10770;
     // Run radio broadcast
-    fm_setup(true);
+    if (!fm_setup(true)) return;
     delay(10);
-    fm_setup(true); // Don't know why but IT WORKS ONLY when launched 2 times...
+    if (!fm_setup(true)) return;
     while (!check(EscPress) && !check(SelPress)) { delay(100); }
 }
 
@@ -190,7 +243,7 @@ void fm_spectrum() {
     delay(10);
 
     if (!returnToMenu) {
-        fm_begin();
+        if (!fm_begin()) return;
         fm_banner();
         while (!check(EscPress) && !check(SelPress)) {
             radio.readTuneMeasure(fm_station);
@@ -200,7 +253,7 @@ void fm_spectrum() {
                 // Clear the display area
                 tft.fillRect(0, 40, tftWidth, tftHeight, bruceConfig.bgColor);
                 // Draw waveform based on signal strength
-                for (size_t i = 0; i < noise_level; i++) {
+                for (int i = 0; i < noise_level; i++) {
                     int lineHeight = map(noise_level, 0, SIGNAL_STRENGTH_THRESHOLD, 0, tftHeight / 2);
                     int lineX =
                         map(i, 0, noise_level - 1, 0, tftWidth - 1); // Map i to within the display width
@@ -215,13 +268,14 @@ void fm_spectrum() {
         fm_stop();
         delay(100);
     }
+    if (!is_running) fm_releaseBus();
 }
 
 bool fm_begin() {
-    if (!radio.begin()) { // begin with address 0x63 (CS high default)
-        tft.fillScreen(bruceConfig.bgColor);
-        Serial.println("Cannot find radio");
-        displayTextLine("Cannot find radio", true);
+    TwoWire *wire = fm_probe();
+    if (!wire) return false;
+    if (!radio.begin(SI4710_ADDR1, wire)) {
+        fm_error("Si4713 init failed");
         return false;
     }
 
@@ -230,9 +284,7 @@ bool fm_begin() {
 
 bool fm_setup(bool traffic_alert, bool silent) {
     int tx_power = 115;
-
-    // Set module as running
-    is_running = true;
+    if (!fm_begin()) return false;
 
     // Clear screen
     if (!silent) {
@@ -241,10 +293,6 @@ bool fm_setup(bool traffic_alert, bool silent) {
         Serial.println("Setup Si4713");
         tft.println(" Setup Si4713");
         delay(1000);
-    }
-
-    if (!fm_begin()) { // begin with address 0x63 (CS high default)
-        return false;
     }
 
     if (!silent) {
@@ -298,15 +346,18 @@ bool fm_setup(bool traffic_alert, bool silent) {
     }
 
     delay(1000);
+    is_running = true;
     return true;
 }
 
 void fm_stop() {
+    if (!fm_probe()) return;
     if (is_running) {
         // Stop radio
         radio.setTXpower(0); // dBuV
         radio.reset();
         is_running = false;
     }
+    fm_releaseBus();
 }
 #endif

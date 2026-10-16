@@ -34,9 +34,14 @@ La recuperación automática genérica de I²C se omite en este perfil porque in
 - CC1101: el perfil aplica CS15 y GDO0=13; utiliza los menús RF existentes.
 - LoRa: un archivo nuevo utiliza SX1262 y 868,1 MHz. Una selección guardada previamente en `/lora_settings.json` puede prevalecer; revisa el selector de radio al abrir Chat y la opción Change Frequency. El perfil limita LoRa a 850–931 MHz.
 - NRF24: están disponibles **Hardware check, Spectrum, MouseJack y NRF Jammer**, además de la API del intérprete. Todos utilizan acceso coordinado al controlador. Esto sustituye la restricción anterior a Spectrum. La compilación y las pruebas de concurrencia no sustituyen a la comprobación física de cada modo.
+- FM: el menú permanece visible para un Si4713 externo opcional. Antes de iniciar sus operaciones se comprueba la respuesta I²C en `0x63`, sobre los pines externos configurados (Grove SDA2/SCL1 por defecto). Si falta, muestra **Si4713 not found** y espera una tecla para volver; no entra en los bucles del controlador. Se rechazan GPIO8/9 en este perfil y se libera el bus antes de mostrar el error. La expansión LoRa/CC1101/NRF24 del usuario no incluye Si4713.
 - SD, teclado y audio deben comprobarse también después de entrar y salir de los radios.
 
 El espectro NRF24 indica actividad recibida; no es un analizador calibrado ni identifica por sí solo un protocolo. La banda 850–931 MHz describe la capacidad del componente LoRa; elige una frecuencia y una antena adecuadas al entorno de ensayo.
+
+Una revisión intermedia sin FM se instaló en la unidad del usuario y se verificó la grabación. Tras notificarse pantalla negra y no recuperarse con RST, se utilizó el reinicio completo mediante el watchdog que implementa esptool para ESP32-S3. No se volvió a escribir la flash durante esa recuperación. Después Bruce respondió por USB: el menú principal excluía FM, conservaba RF/NRF24/LoRa y permitió completar Hardware check con 30 muestras y 0 fallos, volviendo al menú principal. Esto comprueba el arranque y ese diagnóstico; no convierte en resuelta la detección del Logitech pendiente.
+
+La revisión final, solicitada para mantener FM visible, también está instalada. Se verificaron **FM Spectrum** y **Brdcast stop** sin Si4713: ambas mostraron `Si4713 not found`, mantuvieron el aviso hasta pulsar una tecla y volvieron al menú mediante Esc remoto. A continuación Hardware check NRF24 completó 37 muestras con 0 fallos. No se activaron transmisiones; el funcionamiento con un Si4713 real requiere otro ensayo.
 
 ## Information y MouseJack
 

@@ -46,6 +46,6 @@ class SerialMonitorTests(unittest.TestCase):
     def test_console_filter_hides_configuration(self):
         for line in ["MAC addr: 00:11:22:33:44:55", '  "wifi_password": "example"', "Device: Cardputer"]:
             self.assertFalse(diagnostic_line(line))
-        for line in ["[MJ scan] frames=12 valid=0", "[MJ scan info] length=10 channel=30",
+        for line in ["[MJ scan] frames=12 valid=0", "[MJ scan info] length=10 channel=30", "[FM] Si4713 not found",
                      "rst:0x15 (USB_UART_CHIP_RESET)", "Guru Meditation Error", "Backtrace: 0x4037"]:
             self.assertTrue(diagnostic_line(line))
